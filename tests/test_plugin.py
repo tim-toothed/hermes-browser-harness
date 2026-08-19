@@ -90,7 +90,7 @@ class BrowserHarnessPluginTests(unittest.TestCase):
         self.assertEqual(captured["cmd"], command)
         self.assertEqual(captured["input"], 'print("ok")')
         self.assertEqual(captured["env"]["BU_CDP_URL"], "http://127.0.0.1:9222")
-        self.assertEqual(captured["env"]["BU_NAME"], "agent")
+        self.assertEqual(captured["env"]["BU_NAME"], tool._runtime_name("agent", "http://127.0.0.1:9222"))
         self.assertEqual(captured["env"]["BH_AGENT_WORKSPACE"], tmp)
         self.assertEqual(captured["cwd"], str(tool._RUNTIME_DIR))
 

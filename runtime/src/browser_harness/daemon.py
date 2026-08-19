@@ -225,8 +225,6 @@ def get_ws_url():
                 last_err = e
                 if e.code == 403:
                     raise RuntimeError("permission-blocked: Chrome is reachable, but the per-session Allow remote debugging popup has not been accepted")
-                if e.code == 404 and (ws := _ws_from_devtools_active_port(url)):
-                    return ws
                 time.sleep(1)
             except Exception as e:
                 last_err = e

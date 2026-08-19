@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
 import re
 import shutil
 import subprocess
+import tempfile
 import time
 import urllib.parse
 import urllib.request
@@ -27,6 +29,7 @@ _IMAGE_PATH_RE = re.compile(
     r"((?:[A-Za-z]:[\\/]|/)[^\s\"']+?\.(?:png|jpe?g|webp))", re.IGNORECASE
 )
 _RUNTIME_DIR = Path(__file__).resolve().parent / "runtime"
+_STATE_VERSION = "plugin-1.1.1-runtime-0.1.9"
 
 _DESCRIPTION = (
     "Drive an already-running Google Chrome through the bundled Browser Harness "
@@ -178,8 +181,40 @@ def _base_env() -> dict:
     env = dict(os.environ)
     env.pop("PYTHONPATH", None)
     env.pop("PYTHONHOME", None)
+    env.pop("BU_CDP_WS", None)
+    home = _hermes_home() / "cache" / "browser-harness" / _STATE_VERSION
+    config = home / "config"
+    tmp = home / "tmp"
+    runtime_key = hashlib.sha256(str(home.resolve()).encode("utf-8")).hexdigest()[:12]
+    runtime = Path(tempfile.gettempdir()) / f"hbh-{runtime_key}"
+    for path in (home, config, tmp, runtime):
+        path.mkdir(parents=True, exist_ok=True)
+    if os.name != "nt":
+        runtime.chmod(0o700)
+    env["BH_HOME"] = str(home)
+    env["BH_CONFIG_DIR"] = str(config)
+    env["BH_TMP_DIR"] = str(tmp)
+    env["BH_RUNTIME_DIR"] = str(runtime)
+    env["BH_RUNTIME_DIR_SHARED"] = "1"
+    env["BH_TMP_DIR_SHARED"] = "1"
     env.setdefault("ANONYMIZED_TELEMETRY", "false")
     return env
+
+
+def _hermes_home() -> Path:
+    try:
+        from hermes_constants import get_hermes_home
+
+        return Path(get_hermes_home())
+    except Exception:
+        configured = os.environ.get("HERMES_HOME")
+        return Path(configured) if configured else Path.home() / ".hermes"
+
+
+def _runtime_name(name: str, cdp_url: str) -> str:
+    endpoint = cdp_url.rstrip("/").lower().encode("utf-8")
+    suffix = hashlib.sha256(endpoint).hexdigest()[:10]
+    return f"{name[:53]}-{suffix}"
 
 
 def _workspace_dir(task_id: Optional[str]) -> Optional[str]:
@@ -258,7 +293,7 @@ def handle_browser_exec(args: dict, **kwargs):
         timeout = _DEFAULT_TIMEOUT_S
 
     env = _base_env()
-    env["BU_NAME"] = session or _configured_name()
+    env["BU_NAME"] = _runtime_name(session or _configured_name(), cdp_url)
     env["BU_CDP_URL"] = cdp_url
     workspace = _workspace_dir(kwargs.get("task_id"))
     if workspace:

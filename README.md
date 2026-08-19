@@ -7,6 +7,7 @@ Cross-platform Hermes Agent plugin that replaces the built-in `browser_exec` han
 - Browser transport: existing loopback Chrome DevTools Protocol endpoint
 - Hermes core modifications: none
 - Chrome installation, startup, profile selection, and OS lifecycle: outside this plugin
+- Plugin-owned daemon/config/runtime namespaces; no reuse of a global Browser Harness daemon
 
 ## Install
 
@@ -29,7 +30,7 @@ hermes config set browser.backend browser-use
 hermes config set browser.cdp_url http://127.0.0.1:9222
 ```
 
-The configured endpoint must be loopback HTTP(S) CDP discovery and must already expose `/json/version`. The plugin does not locate, download, install, launch, stop, update, or repair Google Chrome. It does not create or select Chrome profiles.
+The configured endpoint must be loopback HTTP(S) CDP discovery and must already expose `/json/version`. The plugin does not locate, download, install, launch, stop, update, or repair Google Chrome. It does not create or select Chrome profiles, and an explicit endpoint never falls back to `DevToolsActivePort` discovery.
 
 ## Runtime
 

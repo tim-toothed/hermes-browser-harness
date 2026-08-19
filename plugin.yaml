@@ -1,5 +1,5 @@
 name: browser-harness
-version: 1.1.0
+version: 1.1.1
 description: Bundled Browser Harness 0.1.9 adapter for Hermes browser_exec
 author: Timur Sharifullin (PROCVETAEV)
 kind: standalone
