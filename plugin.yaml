@@ -1,0 +1,9 @@
+name: browser-harness
+version: 1.0.0
+description: External Browser Harness adapter for Hermes browser_exec
+kind: standalone
+author: Timur Sharifullin (PROCVETAEV)
+platforms:
+  - windows
+provides_tools:
+  - browser_exec
