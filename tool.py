@@ -8,6 +8,7 @@ import logging
 import os
 import re
 import shutil
+import socket
 import subprocess
 import tempfile
 import time
@@ -29,17 +30,17 @@ _IMAGE_PATH_RE = re.compile(
     r"((?:[A-Za-z]:[\\/]|/)[^\s\"']+?\.(?:png|jpe?g|webp))", re.IGNORECASE
 )
 _RUNTIME_DIR = Path(__file__).resolve().parent / "runtime"
-_STATE_VERSION = "plugin-1.2.1-runtime-0.1.9"
+_STATE_VERSION = "plugin-1.3.0-runtime-0.1.9"
 
 _DESCRIPTION = (
-    "Drive an already-running Google Chrome through the bundled Browser Harness "
+    "Drive configured managed Google Chrome through the bundled Browser Harness "
     "0.1.9 runtime and its loopback CDP endpoint. The code argument is Python "
     "executed with Browser Harness pre-imported helpers; print every value needed "
     "in the result. Browser state and workspace persist across calls, but Python "
     "variables do not. Use new_tab(url) for first navigation, goto_url(url) for "
     "current-tab navigation, wait_for_load(), page_info(), js(expr), fill_input(), "
-    "capture_screenshot(), and cdp('Domain.method', **kwargs). Chrome installation, "
-    "startup, profiles, and OS lifecycle are operator-managed outside this plugin."
+    "capture_screenshot(), and cdp('Domain.method', **kwargs). Default-profile cold "
+    "startup is automatic; managed profile selection follows the browser policy."
 )
 
 BROWSER_EXEC_SCHEMA = {
@@ -167,69 +168,160 @@ def apply_profile_preferences(user_data_dir: Path, profile_directory: str) -> bo
     return True
 
 
-def _prepare_configured_profile() -> Optional[str]:
-    """Prepare configured profile data before an external lifecycle starts Chrome."""
+def _launch_config() -> Optional[dict[str, str]]:
     cfg = _harness_config()
+    executable = os.path.expandvars(str(cfg.get("executable") or "").strip())
     user_data_dir = os.path.expandvars(str(cfg.get("user_data_dir") or "").strip())
-    if not user_data_dir:
+    if not executable or not user_data_dir:
         return None
-    profile_directory = str(cfg.get("profile_directory") or "Default").strip() or "Default"
+    return {
+        "executable": executable,
+        "user_data_dir": user_data_dir,
+        "profile_directory": str(cfg.get("profile_directory") or "Default").strip() or "Default",
+    }
+
+
+def _ensure_browser(env: dict, timeout_s: float = 15.0) -> Optional[str]:
+    cdp_url = str(env.get("BU_CDP_URL") or "").strip()
+    ready_error = _cdp_ready(cdp_url)
+    if ready_error is None:
+        return None
+    if os.name != "nt":
+        return ready_error
+    launch = _launch_config()
+    if launch is None:
+        return ready_error
+
+    parsed = urllib.parse.urlparse(cdp_url)
     try:
-        apply_profile_preferences(Path(user_data_dir), profile_directory)
-        return None
+        with socket.create_connection((parsed.hostname, parsed.port), timeout=0.3):
+            return (
+                "Browser Harness cannot start managed Chrome because "
+                f"{parsed.hostname}:{parsed.port} is occupied by a non-CDP listener."
+            )
+    except OSError:
+        pass
+
+    executable = Path(launch["executable"])
+    user_data_dir = Path(launch["user_data_dir"])
+    if not executable.is_file():
+        return f"Configured Chrome executable does not exist: {executable}"
+    user_data_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        apply_profile_preferences(user_data_dir, launch["profile_directory"])
     except (OSError, RuntimeError) as exc:
         return f"Failed to configure managed Chrome profile: {exc}"
 
+    command = [
+        str(executable),
+        f"--remote-debugging-port={parsed.port}",
+        f"--user-data-dir={user_data_dir}",
+        f"--profile-directory={launch['profile_directory']}",
+        "--disable-background-mode",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--new-window",
+        "about:blank",
+    ]
+    creationflags = (
+        getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        | getattr(subprocess, "DETACHED_PROCESS", 0)
+        | getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0)
+    )
+    try:
+        process = subprocess.Popen(
+            command,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+            creationflags=creationflags,
+        )
+    except OSError as exc:
+        return f"Failed to launch configured Chrome: {exc}"
 
-def _configured_extensions() -> tuple[list[dict[str, str]], Optional[str]]:
+    deadline = time.monotonic() + max(1.0, timeout_s)
+    while time.monotonic() < deadline:
+        if _cdp_ready(cdp_url) is None:
+            return None
+        if process.poll() is not None:
+            break
+        time.sleep(0.2)
+    return f"Configured Chrome did not expose Browser Harness CDP at {cdp_url} within {timeout_s:g}s."
+
+
+def _browser_cdp_call(cdp_url: str, method: str, params: Optional[dict] = None) -> dict:
+    from websockets.sync.client import connect
+
+    with urllib.request.urlopen(f"{cdp_url.rstrip('/')}/json/version", timeout=5) as response:
+        version = json.loads(response.read())
+    with connect(version["webSocketDebuggerUrl"], origin=None, open_timeout=5, close_timeout=2) as ws:
+        ws.send(json.dumps({"id": 1, "method": method, "params": params or {}}))
+        while True:
+            response = json.loads(ws.recv(timeout=10))
+            if response.get("id") != 1:
+                continue
+            if "error" in response:
+                raise RuntimeError(response["error"])
+            result = response.get("result")
+            if not isinstance(result, dict):
+                raise RuntimeError(f"Invalid CDP result for {method}")
+            return result
+
+
+def _ensure_extensions(env: dict) -> Optional[str]:
     configured = _harness_config().get("extensions") or []
     if not isinstance(configured, list):
-        return [], "Browser Harness extensions config must be a list."
-    expected: list[dict[str, str]] = []
+        return "Browser Harness extensions config must be a list."
+    if not configured:
+        return None
+    cdp_url = str(env.get("BU_CDP_URL") or "").strip()
+
+    def normalized(value: object) -> str:
+        return os.path.normcase(os.path.normpath(os.path.expandvars(str(value))))
+
+    expected = []
     for item in configured:
         if not isinstance(item, dict):
-            return [], "Each Browser Harness extension must be an object."
+            return "Each Browser Harness extension must be an object."
         extension_id = str(item.get("id") or "").strip()
         version = str(item.get("version") or "").strip()
         path = os.path.expandvars(str(item.get("path") or "").strip())
         if not re.fullmatch(r"[a-p]{32}", extension_id):
-            return [], f"Invalid Browser Harness extension id: {extension_id!r}"
+            return f"Invalid Browser Harness extension id: {extension_id!r}"
         if not version or not path or not Path(path).is_dir():
-            return [], f"Browser Harness extension is unavailable: {extension_id}"
-        expected.append({"id": extension_id, "version": version, "path": str(Path(path).resolve())})
-    return expected, None
+            return f"Browser Harness extension is unavailable: {extension_id}"
+        expected.append({"id": extension_id, "version": version, "path": path})
 
+    def missing_id(extensions: list) -> Optional[str]:
+        by_id = {str(item.get("id")): item for item in extensions if isinstance(item, dict)}
+        for item in expected:
+            actual = by_id.get(item["id"])
+            if actual is None:
+                return item["id"]
+            if normalized(actual.get("path", "")) != normalized(item["path"]):
+                raise RuntimeError(f"Extension {item['id']} is loaded from an unexpected path.")
+            if actual.get("version") != item["version"] or actual.get("enabled") is not True:
+                raise RuntimeError(f"Extension {item['id']} failed version/enabled read-back.")
+        return None
 
-def _extension_bootstrap(code: str, expected: list[dict[str, str]]) -> str:
-    """Prepend fail-closed configured-extension loading to one Harness program."""
-    if not expected:
-        return code
-    payload = json.dumps(expected, ensure_ascii=False)
-    return f'''import json as __hbh_json, os as __hbh_os
-__hbh_expected = __hbh_json.loads({payload!r})
-def __hbh_norm(value):
-    return __hbh_os.path.normcase(__hbh_os.path.normpath(__hbh_os.path.expandvars(str(value))))
-def __hbh_read_extensions():
-    return cdp("Extensions.getExtensions").get("extensions", [])
-__hbh_current = __hbh_read_extensions()
-__hbh_by_id = {{str(item.get("id")): item for item in __hbh_current if isinstance(item, dict)}}
-for __hbh_item in __hbh_expected:
-    __hbh_actual = __hbh_by_id.get(__hbh_item["id"])
-    if __hbh_actual is None:
-        __hbh_loaded = cdp("Extensions.loadUnpacked", path=__hbh_item["path"])
-        if __hbh_loaded.get("id") != __hbh_item["id"]:
-            raise RuntimeError("Chrome loaded an unexpected configured extension ID")
-        __hbh_current = __hbh_read_extensions()
-        __hbh_by_id = {{str(item.get("id")): item for item in __hbh_current if isinstance(item, dict)}}
-        __hbh_actual = __hbh_by_id.get(__hbh_item["id"])
-    if __hbh_actual is None:
-        raise RuntimeError("Configured Chrome extension is missing after load")
-    if __hbh_norm(__hbh_actual.get("path", "")) != __hbh_norm(__hbh_item["path"]):
-        raise RuntimeError("Configured Chrome extension is loaded from an unexpected path")
-    if str(__hbh_actual.get("version", "")) != __hbh_item["version"] or __hbh_actual.get("enabled") is not True:
-        raise RuntimeError("Configured Chrome extension failed version/enabled read-back")
-del __hbh_expected, __hbh_current, __hbh_by_id
-exec(compile({code!r}, "<browser_exec>", "exec"))'''
+    try:
+        current = _browser_cdp_call(cdp_url, "Extensions.getExtensions").get("extensions", [])
+        missing = missing_id(current)
+        while missing:
+            item = next(value for value in expected if value["id"] == missing)
+            loaded = _browser_cdp_call(
+                cdp_url,
+                "Extensions.loadUnpacked",
+                {"path": str(Path(item["path"]).resolve())},
+            )
+            if loaded.get("id") != missing:
+                raise RuntimeError(f"Chrome loaded an unexpected extension id for {missing}.")
+            current = _browser_cdp_call(cdp_url, "Extensions.getExtensions").get("extensions", [])
+            missing = missing_id(current)
+        return None
+    except Exception as exc:
+        return f"Browser Harness extension initialization failed: {exc}"
 
 
 def _validate_loopback_cdp(url: str) -> Optional[str]:
@@ -402,13 +494,6 @@ def handle_browser_exec(args: dict, **kwargs):
     error = _validate_loopback_cdp(cdp_url)
     if error:
         return _json_error(error)
-    cdp_error = _cdp_ready(cdp_url)
-    if cdp_error:
-        profile_error = _prepare_configured_profile()
-        return _json_error(profile_error or cdp_error)
-    extensions, error = _configured_extensions()
-    if error:
-        return _json_error(error)
     command = _runtime_command()
     if not command:
         return _json_error("Bundled Browser Harness runtime is incomplete or uv is unavailable.")
@@ -430,6 +515,13 @@ def handle_browser_exec(args: dict, **kwargs):
     if workspace:
         env["BH_AGENT_WORKSPACE"] = workspace
 
+    error = _ensure_browser(env)
+    if error:
+        return _json_error(error)
+    error = _ensure_extensions(env)
+    if error:
+        return _json_error(error)
+
     popen_extra: dict[str, Any] = {}
     if os.name == "nt":
         try:
@@ -446,7 +538,7 @@ def handle_browser_exec(args: dict, **kwargs):
     try:
         process = subprocess.run(
             command,
-            input=_extension_bootstrap(code, extensions),
+            input=code,
             capture_output=True,
             text=True,
             encoding="utf-8",

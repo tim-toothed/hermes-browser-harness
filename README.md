@@ -4,10 +4,11 @@ Cross-platform Hermes Agent plugin that replaces the built-in `browser_exec` han
 
 - Browser Harness runtime: **0.1.9**, vendored in this repository
 - Supported hosts: Windows and Linux
-- Browser transport: existing loopback Chrome DevTools Protocol endpoint
+- Browser transport: configured loopback Chrome DevTools Protocol endpoint
 - Hermes core modifications: none
-- Chrome installation, startup, profile selection, and OS lifecycle: outside this plugin
-- Managed Chrome configuration: additive profile preferences before cold start and configured unpacked-extension loading on `browser_exec`
+- Chrome installation and non-default profile switching: operator/managed-profile lifecycle
+- Default managed Chrome cold start: deterministic plugin code on Windows
+- Managed Chrome configuration: additive profile preferences before cold start and code-level configured unpacked-extension loading
 - Plugin-owned daemon/config/runtime namespaces; no reuse of a global Browser Harness daemon
 
 ## Install
@@ -31,11 +32,11 @@ hermes config set browser.backend browser-use
 hermes config set browser.cdp_url http://127.0.0.1:9222
 ```
 
-The configured endpoint must be loopback HTTP(S) CDP discovery. The plugin does not locate, download, install, launch, stop, update, or repair Google Chrome. It does not create or select Chrome profiles, and an explicit endpoint never falls back to `DevToolsActivePort` discovery.
+The configured endpoint must be loopback HTTP(S) CDP discovery. The plugin does not locate, download, install, update, or repair Google Chrome. It does not create or select Chrome profiles, and an explicit endpoint never falls back to `DevToolsActivePort` discovery. On Windows, when that endpoint is down and explicit `browser.harness.executable` and `browser.harness.user_data_dir` values are configured, plugin code cold-starts that default managed profile.
 
-When `browser.harness.user_data_dir` is configured and the CDP endpoint is down, the plugin additively prepares the configured profile before the external lifecycle starts Chrome. It preserves unrelated preferences and extensions while applying the managed translation, notification, session-restore, clean-exit, welcome-page, and download settings.
+Before that cold start, the plugin additively prepares the configured profile. It preserves unrelated preferences and extensions while applying the managed translation, notification, session-restore, clean-exit, welcome-page, and download settings.
 
-When `browser.harness.extensions` is configured, every `browser_exec` verifies each extension's ID, version, enabled state, and exact path. Missing configured extensions are loaded into the already-running Chrome with `Extensions.loadUnpacked`; unexpected paths or versions fail closed. Extension artifacts and credentials remain deployment inputs outside the public repository.
+When `browser.harness.extensions` is configured, plugin code verifies each extension's ID, version, enabled state, and exact path after Chrome is ready and before executing the requested Browser Harness program. Missing configured extensions are loaded with browser-level `Extensions.loadUnpacked`; unexpected paths or versions fail closed. The LLM neither selects nor loads these extensions. Extension artifacts and credentials remain deployment inputs outside the public repository.
 
 ## Runtime
 
@@ -52,10 +53,12 @@ No separate global `browser-harness` installation is required. The first executi
 ```text
 Hermes browser toolset
   → browser_exec override
-  → managed preference preparation / configured extension read-back
+  → default Chrome cold start when required
+  → managed preference preparation
+  → configured extension initialization and read-back
   → bundled Browser Harness 0.1.9
   → BU_CDP_URL
-  → operator-managed Google Chrome
+  → managed Google Chrome
 ```
 
 ## Development
