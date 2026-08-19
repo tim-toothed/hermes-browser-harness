@@ -1,6 +1,12 @@
 # Hermes Browser Harness
 
-Standalone [Hermes Agent](https://github.com/NousResearch/hermes-agent) plugin that replaces the built-in `browser_exec` handler with [Browser Harness](https://github.com/browser-use/browser-harness), without modifying Hermes core.
+Cross-platform Hermes Agent plugin that replaces the built-in `browser_exec` handler with a bundled, version-locked Browser Harness runtime.
+
+- Browser Harness runtime: **0.1.9**, vendored in this repository
+- Supported hosts: Windows and Linux
+- Browser transport: existing loopback Chrome DevTools Protocol endpoint
+- Hermes core modifications: none
+- Chrome installation, startup, profile selection, and OS lifecycle: outside this plugin
 
 ## Install
 
@@ -8,52 +14,53 @@ Standalone [Hermes Agent](https://github.com/NousResearch/hermes-agent) plugin t
 hermes plugins install tim-toothed/hermes-browser-harness
 ```
 
-When Hermes asks whether to enable the plugin and grant permission to replace built-in tools, confirm both prompts. The override is required because this plugin intentionally replaces `browser_exec` while preserving its native tool name and `browser` toolset.
+Enable the plugin and grant its required built-in tool override when Hermes prompts. On Hermes versions that separate installation from the privileged grant, run:
+
+```bash
+hermes plugins enable browser-harness --allow-tool-override
+```
 
 Restart the active Hermes process after installation so it reloads plugins.
 
-## Requirements
+## Configuration
 
-- Hermes Agent with standalone plugin support
-- Windows and Google Chrome
-- Browser Harness CLI available as `browser-harness`, or `uvx` available for fallback execution
-- Managed Chrome configuration under `browser.harness` when automatic Chrome launch is required
-
-Minimal runtime configuration:
-
-```yaml
-browser:
-  backend: browser-use
-  cdp_url: http://127.0.0.1:9222
-  harness:
-    name: agent
-    executable: C:\Program Files\Google\Chrome\Application\chrome.exe
-    user_data_dir: C:\Users\YOUR_USER\AppData\Local\hermes\Hermes Automation
-    profile_directory: Default
+```bash
+hermes config set browser.backend browser-use
+hermes config set browser.cdp_url http://127.0.0.1:9222
 ```
 
-Use `hermes config set` rather than editing `config.yaml` manually.
+The configured endpoint must be loopback HTTP(S) CDP discovery and must already expose `/json/version`. The plugin does not locate, download, install, launch, stop, update, or repair Google Chrome. It does not create or select Chrome profiles.
 
-## What it does
+## Runtime
 
-- registers an explicit override for the existing `browser_exec` tool;
-- keeps the upstream `browser` toolset and schema-facing workflow;
-- launches or reuses one managed Chrome on loopback CDP;
-- preserves the persistent Chrome profile;
-- executes Browser Harness Python through its CLI;
-- leaves Hermes source files unchanged.
+The complete Browser Harness 0.1.9 Python package is stored under `runtime/src/browser_harness`. Its MIT license is preserved in `runtime/BROWSER_HARNESS_LICENSE`. Exact Python dependencies are locked in `runtime/uv.lock` and run in the plugin-local environment with:
 
-## Security
+```text
+uv run --frozen --project <plugin>/runtime browser-harness
+```
 
-Tool override is a privileged Hermes capability. Review this repository before granting it. The plugin refuses non-loopback managed Chrome startup and reuses Hermes URL safety checks when available. It does not collect credentials or telemetry.
+No separate global `browser-harness` installation is required. The first execution may download only the Python packages pinned by `uv.lock`; it never installs a browser.
+
+## Architecture
+
+```text
+Hermes browser toolset
+  → browser_exec override
+  → bundled Browser Harness 0.1.9
+  → BU_CDP_URL
+  → operator-managed Google Chrome
+```
 
 ## Development
 
 ```bash
 python -m unittest discover -s tests -v
-python -m py_compile __init__.py tool.py tests/test_plugin.py
+python -m py_compile __init__.py tool.py tests/test_plugin.py runtime/src/browser_harness/*.py
+cd runtime
+uv lock --check
+uv run --frozen browser-harness --version
 ```
 
-## Русский
+## License
 
-Плагин штатно устанавливается через `hermes plugins install`, переопределяет только `browser_exec` и не изменяет внутренние файлы Hermes. При установке необходимо явно разрешить override встроенного инструмента.
+The plugin adapter is MIT licensed by Timur Sharifullin / PROCVETAEV. The vendored Browser Harness runtime remains MIT licensed by Browser Use; see `runtime/BROWSER_HARNESS_LICENSE`.

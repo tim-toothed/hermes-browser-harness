@@ -7,7 +7,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 
 
@@ -38,91 +37,68 @@ class BrowserHarnessPluginTests(unittest.TestCase):
             if name == "browser_harness_plugin" or name.startswith("browser_harness_plugin."):
                 sys.modules.pop(name, None)
 
-    def test_registers_browser_exec_as_explicit_override_in_existing_toolset(self):
+    def test_registers_existing_browser_exec_as_explicit_override(self):
         plugin = load_plugin_module()
         ctx = FakeContext()
-
         plugin.register(ctx)
-
         self.assertEqual(len(ctx.calls), 1)
         call = ctx.calls[0]
         self.assertEqual(call["name"], "browser_exec")
         self.assertEqual(call["toolset"], "browser")
         self.assertIs(call["override"], True)
         self.assertEqual(call["handler"].__module__, plugin.__name__)
-        self.assertTrue(call["check_fn"]())
-        self.assertIn("Browser Harness", call["schema"]["description"])
+        self.assertEqual(set(call["schema"]["parameters"]["properties"]), {"code", "session", "timeout_s"})
 
-    def test_handler_passes_code_name_cdp_and_workspace_to_harness(self):
-        plugin = load_plugin_module()
+    def test_runtime_is_bundled_and_locked_at_019(self):
+        runtime = PLUGIN_DIR / "runtime"
+        self.assertTrue((runtime / "src/browser_harness/run.py").is_file())
+        self.assertTrue((runtime / "BROWSER_HARNESS_LICENSE").is_file())
+        pyproject = (runtime / "pyproject.toml").read_text(encoding="utf-8")
+        lock = (runtime / "uv.lock").read_text(encoding="utf-8")
+        self.assertIn('version = "0.1.9"', pyproject)
+        self.assertIn('name = "browser-harness"', lock)
+
+    def test_unavailable_cdp_fails_before_runtime_start(self):
+        load_plugin_module()
         tool = importlib.import_module("browser_harness_plugin.tool")
-        config = {
-            "browser": {
-                "cdp_url": "http://127.0.0.1:9222",
-                "harness": {"name": "agent"},
-            }
-        }
+        with patch.object(tool, "_configured_cdp_url", return_value="http://127.0.0.1:9222"), patch.object(
+            tool, "_cdp_ready", return_value="CDP unavailable"
+        ), patch.object(tool, "_runtime_command") as runtime_command:
+            result = json.loads(tool.handle_browser_exec({"code": "print(page_info())"}))
+        self.assertEqual(result["error"], "CDP unavailable")
+        runtime_command.assert_not_called()
+
+    def test_handler_uses_bundled_frozen_runtime_and_existing_cdp(self):
+        load_plugin_module()
+        tool = importlib.import_module("browser_harness_plugin.tool")
         captured = {}
 
         def fake_run(cmd, **kwargs):
             captured.update({"cmd": cmd, **kwargs})
             return SimpleNamespace(returncode=0, stdout="OK\n", stderr="")
 
+        command = ["uv", "run", "--frozen", "--project", str(tool._RUNTIME_DIR), "browser-harness"]
+        config = {"browser": {"cdp_url": "http://127.0.0.1:9222", "harness": {"name": "agent"}}}
         with tempfile.TemporaryDirectory() as tmp, patch.object(tool, "_read_config", return_value=config), patch.object(
-            tool, "_find_cli", return_value=["browser-harness"]
-        ), patch.object(tool, "_ensure_browser", return_value=None), patch.object(
-            tool, "_ensure_extensions", return_value=None
-        ), patch.object(tool, "_workspace_dir", return_value=tmp), patch.object(
-            tool.subprocess, "run", side_effect=fake_run
-        ):
-            result = json.loads(
-                tool.handle_browser_exec(
-                    {"code": 'print("ok")', "timeout_s": 30}, task_id="task-1"
-                )
-            )
+            tool, "_cdp_ready", return_value=None
+        ), patch.object(tool, "_runtime_command", return_value=command), patch.object(
+            tool, "_workspace_dir", return_value=tmp
+        ), patch.object(tool.subprocess, "run", side_effect=fake_run):
+            result = json.loads(tool.handle_browser_exec({"code": 'print("ok")', "timeout_s": 30}, task_id="task-1"))
 
         self.assertTrue(result["success"])
-        self.assertEqual(captured["cmd"], ["browser-harness"])
+        self.assertEqual(captured["cmd"], command)
         self.assertEqual(captured["input"], 'print("ok")')
-        self.assertEqual(captured["env"]["BU_NAME"], "agent")
         self.assertEqual(captured["env"]["BU_CDP_URL"], "http://127.0.0.1:9222")
+        self.assertEqual(captured["env"]["BU_NAME"], "agent")
         self.assertEqual(captured["env"]["BH_AGENT_WORKSPACE"], tmp)
+        self.assertEqual(captured["cwd"], str(tool._RUNTIME_DIR))
 
-    def test_profile_preferences_are_additive_and_idempotent(self):
+    def test_non_loopback_cdp_is_rejected(self):
         load_plugin_module()
         tool = importlib.import_module("browser_harness_plugin.tool")
-        with tempfile.TemporaryDirectory() as tmp:
-            user_data_dir = Path(tmp) / "profile"
-            default = user_data_dir / "Default"
-            default.mkdir(parents=True)
-            preferences = default / "Preferences"
-            original = {
-                "extensions": {"settings": {"keep-me": {"state": 1}}},
-                "profile": {"default_content_setting_values": {"popups": 1}},
-            }
-            preferences.write_text(json.dumps(original), encoding="utf-8")
-
-            self.assertTrue(tool.apply_profile_preferences(user_data_dir, "Default"))
-            configured = json.loads(preferences.read_text(encoding="utf-8"))
-            self.assertEqual(configured["extensions"], original["extensions"])
-            self.assertEqual(
-                configured["profile"]["default_content_setting_values"]["popups"], 1
-            )
-            self.assertEqual(
-                configured["profile"]["default_content_setting_values"]["notifications"],
-                2,
-            )
-            self.assertFalse(configured["translate"]["enabled"])
-            self.assertFalse(configured["download"]["prompt_for_download"])
-            self.assertFalse(tool.apply_profile_preferences(user_data_dir, "Default"))
-
-    def test_missing_cli_returns_install_hint(self):
-        load_plugin_module()
-        tool = importlib.import_module("browser_harness_plugin.tool")
-        with patch.object(tool, "_find_cli", return_value=None):
-            result = json.loads(tool.handle_browser_exec({"code": "print(page_info())"}))
-        self.assertIn("browser-harness", result["error"])
-        self.assertIn("uv tool install browser-harness", result["error"])
+        self.assertIn("loopback", tool._validate_loopback_cdp("http://10.0.0.8:9222"))
+        self.assertIsNone(tool._validate_loopback_cdp("http://localhost:9222"))
 
 
 if __name__ == "__main__":

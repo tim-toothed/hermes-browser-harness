@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: hermes-browser-harness-runtime
+Version: 0.1.9
+Summary: Bundled Browser Harness runtime for the Hermes plugin
+Requires-Python: >=3.11
+Requires-Dist: cdp-use==1.4.5
+Requires-Dist: fetch-use==0.4.0
+Requires-Dist: pillow==12.3.0
+Requires-Dist: websockets==15.0.1
