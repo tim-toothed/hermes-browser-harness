@@ -1,2 +1,0 @@
-[console_scripts]
-browser-harness = browser_harness.run:main
