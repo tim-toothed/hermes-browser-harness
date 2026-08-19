@@ -1,6 +1,6 @@
 name: browser-harness
-version: 1.1.1
-description: Bundled Browser Harness 0.1.9 adapter for Hermes browser_exec
+version: 1.2.0
+description: Bundled Browser Harness 0.1.9 adapter with managed Chrome configuration
 author: Timur Sharifullin (PROCVETAEV)
 kind: standalone
 platforms:

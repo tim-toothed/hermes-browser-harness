@@ -29,7 +29,7 @@ _IMAGE_PATH_RE = re.compile(
     r"((?:[A-Za-z]:[\\/]|/)[^\s\"']+?\.(?:png|jpe?g|webp))", re.IGNORECASE
 )
 _RUNTIME_DIR = Path(__file__).resolve().parent / "runtime"
-_STATE_VERSION = "plugin-1.1.1-runtime-0.1.9"
+_STATE_VERSION = "plugin-1.2.0-runtime-0.1.9"
 
 _DESCRIPTION = (
     "Drive an already-running Google Chrome through the bundled Browser Harness "
@@ -92,6 +92,11 @@ def _browser_config() -> dict:
     return value if isinstance(value, dict) else {}
 
 
+def _harness_config() -> dict:
+    value = _browser_config().get("harness", {})
+    return value if isinstance(value, dict) else {}
+
+
 def _configured_cdp_url() -> str:
     return str(
         os.environ.get("BROWSER_CDP_URL")
@@ -101,11 +106,130 @@ def _configured_cdp_url() -> str:
 
 
 def _configured_name() -> str:
-    harness = _browser_config().get("harness", {})
-    if not isinstance(harness, dict):
-        harness = {}
-    name = str(harness.get("name") or "agent").strip()
+    name = str(_harness_config().get("name") or "agent").strip()
     return name if _SESSION_RE.fullmatch(name) else "agent"
+
+
+def apply_profile_preferences(user_data_dir: Path, profile_directory: str) -> bool:
+    """Apply additive managed-Chrome preferences without touching unrelated data."""
+    profile_dir = user_data_dir / profile_directory
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    downloads_dir = (user_data_dir / "Downloads").resolve()
+    downloads_dir.mkdir(parents=True, exist_ok=True)
+    path = profile_dir / "Preferences"
+    if path.is_file():
+        try:
+            preferences = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise RuntimeError(f"Managed Chrome Preferences cannot be read: {exc}") from exc
+        if not isinstance(preferences, dict):
+            raise RuntimeError("Managed Chrome Preferences root must be an object.")
+    else:
+        preferences = {}
+
+    desired = {
+        ("translate", "enabled"): False,
+        ("profile", "default_content_setting_values", "notifications"): 2,
+        ("session", "restore_on_startup"): 5,
+        ("browser", "has_seen_welcome_page"): True,
+        ("profile", "exit_type"): "Normal",
+        ("profile", "exited_cleanly"): True,
+        ("download", "default_directory"): str(downloads_dir),
+        ("download", "prompt_for_download"): False,
+        ("download", "directory_upgrade"): True,
+    }
+    changed = False
+    for keys, value in desired.items():
+        node = preferences
+        for key in keys[:-1]:
+            child = node.get(key)
+            if child is None:
+                child = {}
+                node[key] = child
+            elif not isinstance(child, dict):
+                raise RuntimeError(f"Managed Chrome Preferences conflicts at {'.'.join(keys[:-1])}.")
+            node = child
+        if node.get(keys[-1]) != value:
+            node[keys[-1]] = value
+            changed = True
+    if not changed:
+        return False
+
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        temporary.write_text(
+            json.dumps(preferences, ensure_ascii=False, separators=(",", ":")),
+            encoding="utf-8",
+        )
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return True
+
+
+def _prepare_configured_profile() -> Optional[str]:
+    """Prepare configured profile data before an external lifecycle starts Chrome."""
+    cfg = _harness_config()
+    user_data_dir = os.path.expandvars(str(cfg.get("user_data_dir") or "").strip())
+    if not user_data_dir:
+        return None
+    profile_directory = str(cfg.get("profile_directory") or "Default").strip() or "Default"
+    try:
+        apply_profile_preferences(Path(user_data_dir), profile_directory)
+        return None
+    except (OSError, RuntimeError) as exc:
+        return f"Failed to configure managed Chrome profile: {exc}"
+
+
+def _configured_extensions() -> tuple[list[dict[str, str]], Optional[str]]:
+    configured = _harness_config().get("extensions") or []
+    if not isinstance(configured, list):
+        return [], "Browser Harness extensions config must be a list."
+    expected: list[dict[str, str]] = []
+    for item in configured:
+        if not isinstance(item, dict):
+            return [], "Each Browser Harness extension must be an object."
+        extension_id = str(item.get("id") or "").strip()
+        version = str(item.get("version") or "").strip()
+        path = os.path.expandvars(str(item.get("path") or "").strip())
+        if not re.fullmatch(r"[a-p]{32}", extension_id):
+            return [], f"Invalid Browser Harness extension id: {extension_id!r}"
+        if not version or not path or not Path(path).is_dir():
+            return [], f"Browser Harness extension is unavailable: {extension_id}"
+        expected.append({"id": extension_id, "version": version, "path": str(Path(path).resolve())})
+    return expected, None
+
+
+def _extension_bootstrap(code: str, expected: list[dict[str, str]]) -> str:
+    """Prepend fail-closed configured-extension loading to one Harness program."""
+    if not expected:
+        return code
+    payload = json.dumps(expected, ensure_ascii=False)
+    return f'''import json as __hbh_json, os as __hbh_os
+__hbh_expected = __hbh_json.loads({payload!r})
+def __hbh_norm(value):
+    return __hbh_os.path.normcase(__hbh_os.path.normpath(__hbh_os.path.expandvars(str(value))))
+def __hbh_read_extensions():
+    return cdp("Extensions.getExtensions").get("extensions", [])
+__hbh_current = __hbh_read_extensions()
+__hbh_by_id = {{str(item.get("id")): item for item in __hbh_current if isinstance(item, dict)}}
+for __hbh_item in __hbh_expected:
+    __hbh_actual = __hbh_by_id.get(__hbh_item["id"])
+    if __hbh_actual is None:
+        __hbh_loaded = cdp("Extensions.loadUnpacked", path=__hbh_item["path"])
+        if __hbh_loaded.get("id") != __hbh_item["id"]:
+            raise RuntimeError("Chrome loaded an unexpected configured extension ID")
+        __hbh_current = __hbh_read_extensions()
+        __hbh_by_id = {{str(item.get("id")): item for item in __hbh_current if isinstance(item, dict)}}
+        __hbh_actual = __hbh_by_id.get(__hbh_item["id"])
+    if __hbh_actual is None:
+        raise RuntimeError("Configured Chrome extension is missing after load")
+    if __hbh_norm(__hbh_actual.get("path", "")) != __hbh_norm(__hbh_item["path"]):
+        raise RuntimeError("Configured Chrome extension is loaded from an unexpected path")
+    if str(__hbh_actual.get("version", "")) != __hbh_item["version"] or __hbh_actual.get("enabled") is not True:
+        raise RuntimeError("Configured Chrome extension failed version/enabled read-back")
+del __hbh_expected, __hbh_current, __hbh_by_id
+exec(compile({code!r}, "<browser_exec>", "exec"))'''
 
 
 def _validate_loopback_cdp(url: str) -> Optional[str]:
@@ -275,7 +399,14 @@ def handle_browser_exec(args: dict, **kwargs):
         return _json_error(blocked)
 
     cdp_url = _configured_cdp_url()
-    error = _validate_loopback_cdp(cdp_url) or _cdp_ready(cdp_url)
+    error = _validate_loopback_cdp(cdp_url)
+    if error:
+        return _json_error(error)
+    cdp_error = _cdp_ready(cdp_url)
+    if cdp_error:
+        profile_error = _prepare_configured_profile()
+        return _json_error(profile_error or cdp_error)
+    extensions, error = _configured_extensions()
     if error:
         return _json_error(error)
     command = _runtime_command()
@@ -315,7 +446,7 @@ def handle_browser_exec(args: dict, **kwargs):
     try:
         process = subprocess.run(
             command,
-            input=code,
+            input=_extension_bootstrap(code, extensions),
             capture_output=True,
             text=True,
             encoding="utf-8",
