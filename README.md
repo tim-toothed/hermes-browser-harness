@@ -38,6 +38,12 @@ Before that cold start, the plugin additively prepares the configured profile. I
 
 When `browser.harness.extensions` is configured, plugin code verifies each extension's ID, version, enabled state, and exact path after Chrome is ready and before executing the requested Browser Harness program. Missing configured extensions are loaded with browser-level `Extensions.loadUnpacked`; unexpected paths or versions fail closed. The LLM neither selects nor loads these extensions. Extension artifacts and credentials remain deployment inputs outside the public repository.
 
+### CAPTCHA boundary
+
+The plugin only loads and verifies a configured CAPTCHA extension. It does not call the provider API, poll provider telemetry, detach page targets, or infer completion from Chrome `/json/list`.
+
+CAPTCHA orchestration belongs to the node's Hermes-visible policy skill. The accepted headed-Windows policy keeps the same `browser_exec` page and exact target visible in the interactive desktop, waits 80 seconds without page interaction, and inspects a screenshot. If the challenge is still visibly unsolved, it preserves the same page state for one additional 80-second interval and performs one final screenshot inspection. There is no automatic third interval or fallback to another browser, profile, target, or backend.
+
 ## Runtime
 
 The complete Browser Harness 0.1.9 Python package is stored under `runtime/src/browser_harness`. Its MIT license is preserved in `runtime/BROWSER_HARNESS_LICENSE`. Exact Python dependencies are locked in `runtime/uv.lock` and run in the plugin-local environment with:
