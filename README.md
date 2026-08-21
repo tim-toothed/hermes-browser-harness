@@ -29,6 +29,8 @@ The same boundary must be applied to Telegram or another active platform. Do not
 
 The Linux package owns Google Chrome, Xvfb, Openbox, systemd lifecycle, managed profiles, uBlock Origin Lite, idle shutdown, and optional temporary Remote Access.
 
+The plugin must already be enabled with tool-override consent. `install-linux.sh` verifies this before package installation or host mutation and fails closed otherwise.
+
 ```bash
 cd /root/.hermes/plugins/browser-harness
 sudo ./install-linux.sh

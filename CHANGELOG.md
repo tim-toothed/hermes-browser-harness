@@ -1,6 +1,11 @@
 # Changelog
 
-## 1.4.6 — 2026-08-21
+## 1.4.7 - 2026-08-21
+
+- Require the `browser-harness` plugin to be enabled with explicit tool-override consent before any privileged Linux host mutation.
+- Fail fast instead of reaching toolset configuration with an installed-but-disabled plugin.
+
+## 1.4.6 - 2026-08-21
 
 ### Changed
 

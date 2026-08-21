@@ -79,6 +79,13 @@ class InstallStateTests(unittest.TestCase):
         self.assertIn("SHARE_MAX_TTL_SECONDS=1800", env_example)
         self.assertNotIn("auth.procvetaev.space", env_example)
 
+    def test_host_installer_requires_enabled_plugin_before_mutation(self):
+        installer = (ROOT / "install-linux.sh").read_text(encoding="utf-8")
+        preflight = installer.index("hermes plugins list --plain --no-bundled")
+        first_mutation = installer.index("apt-get update -qq")
+        self.assertLess(preflight, first_mutation)
+        self.assertIn('run: hermes plugins enable browser-harness --allow-tool-override', installer)
+
     def test_remote_access_requires_target_and_owns_one_tab(self):
         broker = (SHARE / "broker.py").read_text(encoding="utf-8")
         skill = (ROOT / "skill" / "SKILL.md").read_text(encoding="utf-8")

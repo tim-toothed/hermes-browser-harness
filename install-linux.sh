@@ -4,6 +4,13 @@ set -euo pipefail
 [[ ${EUID:-$(id -u)} -eq 0 ]] || { echo "run as root" >&2; exit 1; }
 command -v hermes >/dev/null || { echo "Hermes CLI is required" >&2; exit 1; }
 [[ $(dpkg --print-architecture) == amd64 ]] || { echo "Only amd64 Linux VPS is currently supported" >&2; exit 1; }
+hermes plugins list --plain --no-bundled \
+  | awk '$1 == "enabled" && $NF == "browser-harness" { found=1 } END { exit !found }' \
+  || {
+    echo "browser-harness plugin must be enabled with tool override before host installation" >&2
+    echo "run: hermes plugins enable browser-harness --allow-tool-override" >&2
+    exit 1
+  }
 
 resolve_hermes_python() {
   local candidate shebang
@@ -80,7 +87,7 @@ restore_unowned_skill() {
 if [[ -d "$HERMES_HOME/skills/browser-harness" && ! -f "$HERMES_HOME/skills/browser-harness/.linux-browser-harness-owned" ]]; then
   backup_root="$HERMES_HOME/backups"
   install -d -o root -g root -m 0700 "$backup_root"
-  unowned_skill_backup="$backup_root/browser-harness.pre-1.4.5.$(date +%Y%m%d%H%M%S).$$"
+  unowned_skill_backup="$backup_root/browser-harness.pre-1.4.7.$(date +%Y%m%d%H%M%S).$$"
   mv -- "$HERMES_HOME/skills/browser-harness" "$unowned_skill_backup"
   trap restore_unowned_skill EXIT
 fi
@@ -189,7 +196,7 @@ if [[ -n "$unowned_skill_backup" && -f "$unowned_skill_backup/browser-profiles.j
 elif [[ ! -f "$HERMES_HOME/skills/browser-harness/browser-profiles.json" ]]; then
   install -m 0644 "$ROOT/skill/browser-profiles.json" "$HERMES_HOME/skills/browser-harness/browser-profiles.json"
 fi
-printf '%s\n' 'browser-harness-linux 1.4.6' > "$HERMES_HOME/skills/browser-harness/.linux-browser-harness-owned"
+printf '%s\n' 'browser-harness-linux 1.4.7' > "$HERMES_HOME/skills/browser-harness/.linux-browser-harness-owned"
 for unit in "$LINUX"/systemd/procvetaev-*.service "$LINUX"/systemd/procvetaev-*.timer "$LINUX"/systemd/procvetaev-browser.target; do
   install -m 0644 "$unit" "/etc/systemd/system/$(basename "$unit")"
 done
@@ -247,5 +254,5 @@ printf '%s\n' "Linux Browser Harness host runtime installed."
 if [[ -n "$unowned_skill_backup" ]]; then
   printf '%s\n' "Previous unowned skill preserved at: $unowned_skill_backup"
 fi
-printf '%s\n' "Enable the browser-harness plugin with tool override, then restart Hermes Gateway."
+printf '%s\n' "Restart Hermes Gateway to load the installed Browser Harness runtime."
 printf '%s\n' "Remote Access additionally requires node-specific broker.crt and broker.key."
