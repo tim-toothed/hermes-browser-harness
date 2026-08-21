@@ -1,0 +1,10 @@
+[Unit]
+Description=Independent 10-minute expiry for browser share
+
+[Timer]
+OnActiveSec=10min
+AccuracySec=1s
+Unit=procvetaev-browser-share-expire.service
+
+[Install]
+WantedBy=timers.target

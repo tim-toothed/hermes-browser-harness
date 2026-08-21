@@ -1,0 +1,13 @@
+[Unit]
+Description=PROCVETAEV temporary HTTPS browser share
+Requires=procvetaev-browser.target procvetaev-novnc.service
+After=procvetaev-browser.target procvetaev-novnc.service network-online.target
+
+[Service]
+Type=simple
+Environment=BROWSER_SHARE_PORT=8791
+EnvironmentFile=-/etc/procvetaev-browser/.env
+ExecStartPre=/usr/local/libexec/procvetaev-browser-harness/browser-share validate
+ExecStart=/usr/bin/caddy run --config /etc/caddy/procvetaev-browser-share.Caddyfile --adapter caddyfile
+ExecStop=/bin/kill -TERM $MAINPID
+Restart=no

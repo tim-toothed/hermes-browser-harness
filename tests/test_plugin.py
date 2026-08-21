@@ -1,8 +1,10 @@
 import importlib.util
 import json
+import importlib.machinery
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -37,14 +39,46 @@ class BrowserHarnessPluginTests(unittest.TestCase):
             if name == "browser_harness_plugin" or name.startswith("browser_harness_plugin."):
                 sys.modules.pop(name, None)
 
-    def test_registers_existing_browser_exec_as_explicit_override(self):
+    def test_extension_installer_normalizes_payload_for_service_user(self):
+        loader = importlib.machinery.SourceFileLoader(
+            "extension_installer", str(PLUGIN_DIR / "linux/scripts/install-browser-extensions")
+        )
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        module = importlib.util.module_from_spec(spec)
+        loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            nested = root / "nested"
+            nested.mkdir(mode=0o700)
+            manifest = nested / "manifest.json"
+            manifest.write_text("{}", encoding="utf-8")
+            with patch.object(Path, "chmod") as chmod:
+                module.normalize_payload_permissions(root)
+            self.assertEqual([call.args[0] for call in chmod.call_args_list], [0o755, 0o755, 0o644])
+
+    def test_extension_installer_excludes_webstore_metadata_from_unpacked_payload(self):
+        loader = importlib.machinery.SourceFileLoader(
+            "extension_installer_metadata", str(PLUGIN_DIR / "linux/scripts/install-browser-extensions")
+        )
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        module = importlib.util.module_from_spec(spec)
+        loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            archive_path = Path(temp_dir) / "extension.zip"
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                archive.writestr("manifest.json", "{}")
+                archive.writestr("_metadata/verified_contents.json", "{}")
+            with zipfile.ZipFile(archive_path) as archive:
+                self.assertEqual([item.filename for item in module.archive_files(archive)], ["manifest.json"])
+
+    def test_registers_existing_browser_exec_in_exclusive_plugin_toolset(self):
         plugin = load_plugin_module()
         ctx = FakeContext()
         plugin.register(ctx)
         self.assertEqual(len(ctx.calls), 1)
         call = ctx.calls[0]
         self.assertEqual(call["name"], "browser_exec")
-        self.assertEqual(call["toolset"], "browser")
+        self.assertEqual(call["toolset"], "browser_harness")
         self.assertIs(call["override"], True)
         self.assertEqual(call["handler"].__module__, plugin.__name__)
         self.assertEqual(set(call["schema"]["parameters"]["properties"]), {"code", "session", "timeout_s"})
@@ -62,11 +96,13 @@ class BrowserHarnessPluginTests(unittest.TestCase):
         load_plugin_module()
         tool = importlib.import_module("browser_harness_plugin.tool")
         with patch.object(tool, "_configured_cdp_url", return_value="http://127.0.0.1:9222"), patch.object(
-            tool, "_cdp_ready", return_value="CDP unavailable"
-        ), patch.object(tool, "_runtime_command") as runtime_command:
+            tool, "_ensure_browser", return_value="CDP unavailable"
+        ), patch.object(tool, "_runtime_command", return_value=["browser-harness"]), patch.object(
+            tool.subprocess, "run"
+        ) as runtime_run:
             result = json.loads(tool.handle_browser_exec({"code": "print(page_info())"}))
         self.assertEqual(result["error"], "CDP unavailable")
-        runtime_command.assert_not_called()
+        runtime_run.assert_not_called()
 
     def test_handler_uses_bundled_frozen_runtime_and_existing_cdp(self):
         load_plugin_module()

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
@@ -10,6 +11,7 @@ import re
 import shutil
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.parse
@@ -30,7 +32,7 @@ _IMAGE_PATH_RE = re.compile(
     r"((?:[A-Za-z]:[\\/]|/)[^\s\"']+?\.(?:png|jpe?g|webp))", re.IGNORECASE
 )
 _RUNTIME_DIR = Path(__file__).resolve().parent / "runtime"
-_STATE_VERSION = "plugin-1.3.0-runtime-0.1.9"
+_STATE_VERSION = "plugin-1.4.5-runtime-0.1.9"
 
 _DESCRIPTION = (
     "Drive configured managed Google Chrome through the bundled Browser Harness "
@@ -113,10 +115,17 @@ def _configured_name() -> str:
 
 def apply_profile_preferences(user_data_dir: Path, profile_directory: str) -> bool:
     """Apply additive managed-Chrome preferences without touching unrelated data."""
+    owner = None
+    if os.name != "nt" and user_data_dir.exists():
+        stat = user_data_dir.stat()
+        owner = (stat.st_uid, stat.st_gid)
     profile_dir = user_data_dir / profile_directory
     profile_dir.mkdir(parents=True, exist_ok=True)
     downloads_dir = (user_data_dir / "Downloads").resolve()
     downloads_dir.mkdir(parents=True, exist_ok=True)
+    if owner is not None:
+        os.chown(profile_dir, *owner)
+        os.chown(downloads_dir, *owner)
     path = profile_dir / "Preferences"
     if path.is_file():
         try:
@@ -162,6 +171,8 @@ def apply_profile_preferences(user_data_dir: Path, profile_directory: str) -> bo
             json.dumps(preferences, ensure_ascii=False, separators=(",", ":")),
             encoding="utf-8",
         )
+        if owner is not None:
+            os.chown(temporary, *owner)
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
@@ -187,7 +198,49 @@ def _ensure_browser(env: dict, timeout_s: float = 15.0) -> Optional[str]:
     if ready_error is None:
         return None
     if os.name != "nt":
-        return ready_error
+        if not sys.platform.startswith("linux"):
+            return ready_error
+        launch = _launch_config()
+        if launch is None:
+            return (
+                "Linux Browser Harness requires browser.harness.executable and "
+                "browser.harness.user_data_dir from install-linux.sh."
+            )
+        executable = Path(launch["executable"])
+        user_data_dir = Path(launch["user_data_dir"])
+        if not executable.is_file():
+            return f"Configured Chrome executable does not exist: {executable}"
+        if not user_data_dir.is_dir():
+            return f"Managed Chrome profile root does not exist: {user_data_dir}"
+        try:
+            apply_profile_preferences(user_data_dir, launch["profile_directory"])
+        except (OSError, RuntimeError) as exc:
+            return f"Failed to configure managed Chrome profile: {exc}"
+        systemctl = shutil.which("systemctl")
+        if not systemctl:
+            return "Linux Browser Harness requires systemd/systemctl."
+        started = subprocess.run(
+            [
+                systemctl,
+                "start",
+                "procvetaev-browser.target",
+                "procvetaev-chrome.service",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        if started.returncode != 0:
+            details = (started.stderr or started.stdout or "systemctl start failed").strip()
+            return f"Failed to start Linux Browser Harness stack: {details[:1000]}"
+        deadline = time.monotonic() + max(1.0, timeout_s)
+        while time.monotonic() < deadline:
+            if _cdp_ready(cdp_url) is None:
+                _touch_linux_activity()
+                return None
+            time.sleep(0.2)
+        return f"Linux Browser Harness stack did not expose CDP at {cdp_url} within {timeout_s:g}s."
     launch = _launch_config()
     if launch is None:
         return ready_error
@@ -417,6 +470,35 @@ def _base_env() -> dict:
     return env
 
 
+def _touch_linux_activity() -> None:
+    if not sys.platform.startswith("linux"):
+        return
+    runtime = Path("/run/procvetaev-browser")
+    runtime.mkdir(parents=True, exist_ok=True)
+    (runtime / "last-activity").touch()
+
+
+@contextlib.contextmanager
+def _linux_activity_lock():
+    """Prevent the existing idle timer from stopping Chrome during browser_exec."""
+    if not sys.platform.startswith("linux"):
+        yield
+        return
+    import fcntl
+
+    runtime = Path("/run/procvetaev-browser")
+    runtime.mkdir(parents=True, exist_ok=True)
+    lock_path = runtime / "activity.lock"
+    with lock_path.open("a+b") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_SH)
+        _touch_linux_activity()
+        try:
+            yield
+        finally:
+            _touch_linux_activity()
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
 def _hermes_home() -> Path:
     try:
         from hermes_constants import get_hermes_home
@@ -515,13 +597,6 @@ def handle_browser_exec(args: dict, **kwargs):
     if workspace:
         env["BH_AGENT_WORKSPACE"] = workspace
 
-    error = _ensure_browser(env)
-    if error:
-        return _json_error(error)
-    error = _ensure_extensions(env)
-    if error:
-        return _json_error(error)
-
     popen_extra: dict[str, Any] = {}
     if os.name == "nt":
         try:
@@ -536,18 +611,25 @@ def handle_browser_exec(args: dict, **kwargs):
 
     started = time.time()
     try:
-        process = subprocess.run(
-            command,
-            input=code,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=timeout,
-            env=env,
-            cwd=str(_RUNTIME_DIR),
-            **popen_extra,
-        )
+        with _linux_activity_lock():
+            error = _ensure_browser(env)
+            if error:
+                return _json_error(error)
+            error = _ensure_extensions(env)
+            if error:
+                return _json_error(error)
+            process = subprocess.run(
+                command,
+                input=code,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=timeout,
+                env=env,
+                cwd=str(_RUNTIME_DIR),
+                **popen_extra,
+            )
     except subprocess.TimeoutExpired:
         return _json_error(f"browser-harness exec timed out after {timeout}s.")
     except OSError as exc:

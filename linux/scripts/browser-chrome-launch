@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+"""Exec Chrome with the profile selected by the root-owned profile helper."""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+from pathlib import Path
+
+STATE = Path("/run/procvetaev-browser/selected-profile.json")
+ROOT = Path("/var/lib/procvetaev-browser").resolve()
+EXTRA_ARGS = Path("/var/lib/procvetaev-browser/chrome-args.json")
+
+
+def load_extra_args() -> list[str]:
+    if not EXTRA_ARGS.exists():
+        return []
+    data = json.loads(EXTRA_ARGS.read_text(encoding="utf-8"))
+    values = data.get("extra_args")
+    if not isinstance(values, list) or not all(isinstance(value, str) and value.startswith("--") for value in values):
+        raise RuntimeError("chrome-args.json extra_args must be a list of Chrome flags")
+    forbidden = ("--user-data-dir", "--remote-debugging-address", "--remote-debugging-port", "--remote-allow-origins")
+    if any(value.split("=", 1)[0] in forbidden for value in values):
+        raise RuntimeError("chrome-args.json cannot override Browser Harness ownership flags")
+    return values
+
+
+def main() -> None:
+    state = json.loads(STATE.read_text(encoding="utf-8"))
+    user_data_dir = Path(str(state.get("user_data_dir", "")))
+    if not user_data_dir.is_absolute():
+        raise RuntimeError("selected Browser profile path is not absolute")
+    resolved = user_data_dir.resolve()
+    if os.path.commonpath((str(ROOT), str(resolved))) != str(ROOT):
+        raise RuntimeError("selected Browser profile is outside the agent-owned root")
+    if not resolved.is_dir():
+        raise RuntimeError("selected Browser profile directory is missing")
+    os.execv(
+        "/usr/bin/google-chrome-stable",
+        [
+            "/usr/bin/google-chrome-stable",
+            f"--user-data-dir={resolved}",
+            "--remote-debugging-address=127.0.0.1",
+            "--remote-debugging-port=9222",
+            "--remote-allow-origins=*",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--window-size=1920,1080",
+            *load_extra_args(),
+            "about:blank",
+        ],
+    )
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as exc:
+        print(f"browser-chrome-launch: {exc}", file=sys.stderr)
+        raise SystemExit(1)

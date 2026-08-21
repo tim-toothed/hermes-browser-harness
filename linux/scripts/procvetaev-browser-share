@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SERVICE=procvetaev-browser-share.service
+TIMER=procvetaev-browser-share-expire.timer
+ENV_FILE=/etc/procvetaev-browser/.env
+RUNTIME_DIR=/run/procvetaev-browser
+
+fail() { echo "browser-share: $*" >&2; exit 1; }
+
+validate() {
+  [[ -r "$ENV_FILE" ]] || fail "missing $ENV_FILE; configure /etc/procvetaev-browser/.env first"
+  # shellcheck disable=SC1091
+  . "$ENV_FILE"
+  [[ "${BROWSER_SHARE_PORT:-8791}" =~ ^[0-9]+$ ]] || fail "invalid BROWSER_SHARE_PORT"
+  [[ -r /etc/procvetaev-browser/broker.crt ]] || fail "missing node certificate"
+  [[ -r /etc/procvetaev-browser/broker.key ]] || fail "missing node private key"
+}
+
+case "${1:-}" in
+  validate)
+    validate
+    ;;
+  open)
+    validate
+    install -d -m 0755 "$RUNTIME_DIR"
+    touch "$RUNTIME_DIR/last-activity"
+    systemctl stop "$TIMER" >/dev/null 2>&1 || true
+    systemctl start procvetaev-browser.target procvetaev-chrome.service
+    for _ in $(seq 1 100); do
+      if curl -fsS --max-time 1 http://127.0.0.1:9222/json/version >/dev/null; then
+        break
+      fi
+      sleep 0.2
+    done
+    curl -fsS --max-time 2 http://127.0.0.1:9222/json/version >/dev/null \
+      || fail "managed Chrome did not expose CDP; refusing black Remote Access session"
+    systemctl start "$SERVICE"
+    systemctl restart "$TIMER"
+    printf '%s\n' "opened for 10 minutes"
+    ;;
+  close)
+    systemctl stop "$TIMER" >/dev/null 2>&1 || true
+    systemctl stop "$SERVICE" >/dev/null 2>&1 || true
+    systemctl stop procvetaev-novnc.service procvetaev-x11vnc.service >/dev/null 2>&1 || true
+    install -d -m 0755 "$RUNTIME_DIR"
+    touch "$RUNTIME_DIR/last-activity"
+    printf '%s\n' "closed"
+    ;;
+  status)
+    systemctl --no-pager --full status "$SERVICE" "$TIMER" || true
+    ;;
+  *)
+    echo "Usage: $0 {validate|open|close|status}" >&2
+    exit 2
+    ;;
+esac

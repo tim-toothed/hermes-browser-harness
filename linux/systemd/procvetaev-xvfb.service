@@ -1,0 +1,16 @@
+[Unit]
+Description=PROCVETAEV virtual X11 display
+PartOf=procvetaev-browser.target
+
+[Service]
+Type=simple
+User=procvetaev-browser
+Group=procvetaev-browser
+Environment=HOME=/var/lib/procvetaev-browser
+ExecStart=/usr/bin/Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp -ac
+ExecStartPost=/bin/sh -c 'for i in $(seq 1 50); do test -S /tmp/.X11-unix/X99 && exit 0; sleep 0.1; done; exit 1'
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

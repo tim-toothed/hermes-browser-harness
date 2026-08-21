@@ -1,0 +1,15 @@
+[Unit]
+Description=PROCVETAEV Openbox window manager
+Requires=procvetaev-xvfb.service
+After=procvetaev-xvfb.service
+PartOf=procvetaev-browser.target
+
+[Service]
+Type=simple
+User=procvetaev-browser
+Group=procvetaev-browser
+Environment=HOME=/var/lib/procvetaev-browser
+Environment=DISPLAY=:99
+ExecStart=/usr/bin/openbox-session
+Restart=on-failure
+RestartSec=2

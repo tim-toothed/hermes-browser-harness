@@ -1,82 +1,132 @@
 # Hermes Browser Harness
 
-Cross-platform Hermes Agent plugin that replaces the built-in `browser_exec` handler with a bundled, version-locked Browser Harness runtime.
+Cross-platform Hermes Agent plugin with a bundled, version-locked Browser Harness runtime and a production Linux host package.
 
-- Browser Harness runtime: **0.1.9**, vendored in this repository
-- Supported hosts: Windows and Linux
-- Browser transport: configured loopback Chrome DevTools Protocol endpoint
-- Hermes core modifications: none
-- Chrome installation and non-default profile switching: operator/managed-profile lifecycle
-- Default managed Chrome cold start: deterministic plugin code on Windows
-- Managed Chrome configuration: additive profile preferences before cold start and code-level configured unpacked-extension loading
-- Plugin-owned daemon/config/runtime namespaces; no reuse of a global Browser Harness daemon
+- Plugin: **1.4.5**
+- Browser Harness runtime: **0.1.9**
+- Model-facing tool: plugin-owned `browser_exec` in the dedicated `browser_harness` toolset
+- Browser transport: one managed Chrome through loopback CDP
+- Supported plugin hosts: Windows and Linux
+- Supported Linux installer target: Debian/Ubuntu amd64 VPS
 
-## Install
+## Plugin installation
 
 ```bash
 hermes plugins install tim-toothed/hermes-browser-harness
-```
-
-Enable the plugin and grant its required built-in tool override when Hermes prompts. On Hermes versions that separate installation from the privileged grant, run:
-
-```bash
 hermes plugins enable browser-harness --allow-tool-override
 ```
 
-Restart the active Hermes process after installation so it reloads plugins.
-
-## Configuration
+Enable `browser_harness` and disable the built-in `browser` toolset on every platform used by the agent. Restart the active Hermes process after installation.
 
 ```bash
-hermes config set browser.backend browser-use
-hermes config set browser.cdp_url http://127.0.0.1:9222
+hermes tools enable browser_harness --platform cli
+hermes tools disable browser --platform cli
 ```
 
-The configured endpoint must be loopback HTTP(S) CDP discovery. The plugin does not locate, download, install, update, or repair Google Chrome. It does not create or select Chrome profiles, and an explicit endpoint never falls back to `DevToolsActivePort` discovery. On Windows, when that endpoint is down and explicit `browser.harness.executable` and `browser.harness.user_data_dir` values are configured, plugin code cold-starts that default managed profile.
+The same boundary must be applied to Telegram or another active platform. Do not expose the granular built-in browser tools beside `browser_exec`.
 
-Before that cold start, the plugin additively prepares the configured profile. It preserves unrelated preferences and extensions while applying the managed translation, notification, session-restore, clean-exit, welcome-page, and download settings.
+## Linux host installation
 
-When `browser.harness.extensions` is configured, plugin code verifies each extension's ID, version, enabled state, and exact path after Chrome is ready and before executing the requested Browser Harness program. Missing configured extensions are loaded with browser-level `Extensions.loadUnpacked`; unexpected paths or versions fail closed. The LLM neither selects nor loads these extensions. Extension artifacts and credentials remain deployment inputs outside the public repository.
+The Linux package owns Google Chrome, Xvfb, Openbox, systemd lifecycle, managed profiles, uBlock Origin Lite, idle shutdown, and optional temporary Remote Access.
 
-### CAPTCHA boundary
-
-The plugin only loads and verifies a configured CAPTCHA extension. It does not call the provider API, poll provider telemetry, detach page targets, or infer completion from Chrome `/json/list`.
-
-CAPTCHA orchestration belongs to the node's Hermes-visible policy skill. The accepted headed-Windows policy keeps the same `browser_exec` page and exact target visible in the interactive desktop, waits 80 seconds without page interaction, and inspects a screenshot. If the challenge is still visibly unsolved, it preserves the same page state for one additional 80-second interval and performs one final screenshot inspection. There is no automatic third interval or fallback to another browser, profile, target, or backend.
-
-## Runtime
-
-The complete Browser Harness 0.1.9 Python package is stored under `runtime/src/browser_harness`. Its MIT license is preserved in `runtime/BROWSER_HARNESS_LICENSE`. Exact Python dependencies are locked in `runtime/uv.lock` and run in the plugin-local environment with:
-
-```text
-uv run --frozen --project <plugin>/runtime browser-harness
+```bash
+cd /root/.hermes/plugins/browser-harness
+sudo ./install-linux.sh
+hermes gateway restart
 ```
 
-No separate global `browser-harness` installation is required. The first execution may download only the Python packages pinned by `uv.lock`; it never installs a browser.
+The installer:
 
-## Architecture
+- installs the Debian/Ubuntu amd64 browser/display dependencies;
+- creates a dedicated service account and persistent profile storage;
+- starts Chrome on demand through systemd and waits for loopback CDP readiness;
+- installs a persistent managed-profile registry and selector;
+- enables `browser_harness`, disables built-in `browser`, and disables `computer_use` for CLI and Telegram;
+- installs pinned uBlock Origin Lite `2026.812.1211` as a managed unpacked extension;
+- preserves profile data, registry, node-local Chrome arguments, credentials, and share state during update;
+- moves an unowned pre-existing `browser-harness` skill to a timestamped backup instead of deleting it;
+- records pre-install Hermes config and toolset membership for conditional restoration on uninstall.
+
+Uninstall only package-owned Linux runtime files:
+
+```bash
+sudo ./uninstall-linux.sh
+```
+
+Persistent profiles and node credentials are not removed automatically.
+
+## Runtime contract
 
 ```text
-Hermes browser toolset
-  → browser_exec override
-  → default Chrome cold start when required
-  → managed preference preparation
-  → configured extension initialization and read-back
+Hermes model
+  → browser_harness toolset
+  → plugin-owned browser_exec
+  → managed Chrome readiness / extension reconciliation
   → bundled Browser Harness 0.1.9
-  → BU_CDP_URL
-  → managed Google Chrome
+  → loopback CDP
+  → one managed Chrome
 ```
+
+`browser_exec` accepts Python using Browser Harness helpers. Browser state and workspace persist across calls, but Python variables do not.
+
+Configured extensions are accepted only after browser-level read-back confirms exact ID, version, enabled state, and path. Package/config presence alone is not activation evidence.
+
+## Managed profiles and concurrency
+
+- Only one managed profile can be active on a node at a time.
+- Switching profiles replaces the Chrome process on the single CDP endpoint.
+- Tasks requiring different profiles must not overlap.
+- Tasks using the same profile may run concurrently in separate Browser Harness session/tab namespaces; Linux acceptance verified this with two real simultaneous cron tasks.
+- No queue is promised or required by the contract. Acceptance checks the user-visible result and tab isolation.
+
+## Linux-only lifecycle
+
+Linux uses Xvfb → Openbox → Chrome under systemd. `browser_exec` holds a shared activity lock so idle shutdown cannot stop Chrome during a task. Temporary Remote Access uses the same display/profile through loopback-only X11VNC, noVNC, and Caddy defaults. It must restore Chrome/CDP before returning a share URL; an empty display is not a successful recovery.
+
+Remote Access requires deployment-specific credentials and external ingress configuration. Credentials, TLS private keys, egress routes, proxy settings, central AUTH deployment, and public listeners are not included in this repository.
+
+Configure `/etc/procvetaev-browser/.env` explicitly before using Remote Access:
+
+```dotenv
+SHARE_AUTH_BASE_URL=https://your-auth-gateway.example
+BROWSER_SHARE_BIND=127.0.0.1
+BROWSER_SHARE_PORT=8791
+```
+
+Keep the default loopback bind unless a protected private ingress must reach Caddy. Any broader bind is an explicit deployment decision.
+
+## CAPTCHA boundary
+
+The package manages only uBlock Origin Lite. The previously tested bundled/unpacked NopeCHA artifact is not shipped. CAPTCHA extension installation and credentials are deployment-specific and currently deferred; no CAPTCHA acceptance PASS is claimed by this release.
+
+## Platform parity
+
+See [`docs/PLATFORM_PARITY.md`](docs/PLATFORM_PARITY.md) for the complete Linux ↔ Windows inventory, shared fixes, platform-specific behavior, and current B1–B6 status.
+
+Release changes are recorded in [`CHANGELOG.md`](CHANGELOG.md).
+
+The main remaining Windows parity work is to deploy and verify the `1.4.5` dedicated-toolset boundary and run the same-profile concurrency test there. Historical Windows installers are not the source for new installations.
 
 ## Development
 
 ```bash
-python -m unittest discover -s tests -v
-python -m py_compile __init__.py tool.py tests/test_plugin.py runtime/src/browser_harness/*.py
+python -m unittest discover -s tests -p 'test_*.py' -v
+python -m py_compile __init__.py tool.py tests/test_plugin.py tests/test_linux_runtime.py \
+  linux/scripts/install-browser-extensions linux/scripts/browser-install-state
+bash -n install-linux.sh uninstall-linux.sh \
+  linux/scripts/browser-chrome-launch linux/scripts/browser-profile \
+  linux/scripts/procvetaev-browser-idle-check linux/scripts/procvetaev-browser-share
 cd runtime
 uv lock --check
 uv run --frozen browser-harness --version
 ```
 
+Functional release acceptance additionally requires a real Hermes session and browser-level read-back; unit tests alone are insufficient.
+
+## Third-party components
+
+The bundled Browser Harness runtime remains MIT licensed by Browser Use; see `runtime/BROWSER_HARNESS_LICENSE`. The pinned uBlock Origin Lite archive contains its upstream license and notices. See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+
 ## License
 
-The plugin adapter is MIT licensed by Timur Sharifullin / PROCVETAEV. The vendored Browser Harness runtime remains MIT licensed by Browser Use; see `runtime/BROWSER_HARNESS_LICENSE`.
+The plugin adapter and Linux orchestration are MIT licensed by Timur Sharifullin / PROCVETAEV. Third-party components retain their own licenses.

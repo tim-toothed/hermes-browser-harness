@@ -1,0 +1,210 @@
+#!/usr/bin/env python3
+"""Capture and conditionally restore Hermes config/toolset state owned by Linux install."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+import tempfile
+from pathlib import Path
+from typing import Any
+
+CONFIG_KEYS = (
+    "browser.backend",
+    "browser.cloud_provider",
+    "browser.cdp_url",
+    "browser.harness.executable",
+    "browser.harness.user_data_dir",
+    "browser.harness.profile_directory",
+    "browser.harness.extensions",
+)
+TOOLSETS = {
+    "browser_harness": True,
+    "browser": False,
+    "computer_use": False,
+}
+PLATFORMS = ("cli", "telegram")
+MISSING = object()
+
+
+def get_nested(data: dict[str, Any], key: str) -> Any:
+    node: Any = data
+    for part in key.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return MISSING
+        node = node[part]
+    return node
+
+
+def set_nested(data: dict[str, Any], key: str, value: Any) -> None:
+    parts = key.split(".")
+    node = data
+    for part in parts[:-1]:
+        child = node.get(part)
+        if not isinstance(child, dict):
+            child = {}
+            node[part] = child
+        node = child
+    node[parts[-1]] = value
+
+
+def delete_nested(data: dict[str, Any], key: str) -> None:
+    parts = key.split(".")
+    chain: list[tuple[dict[str, Any], str]] = []
+    node: Any = data
+    for part in parts[:-1]:
+        if not isinstance(node, dict) or not isinstance(node.get(part), dict):
+            return
+        chain.append((node, part))
+        node = node[part]
+    if isinstance(node, dict):
+        node.pop(parts[-1], None)
+    for parent, part in reversed(chain):
+        child = parent.get(part)
+        if isinstance(child, dict) and not child:
+            parent.pop(part, None)
+        else:
+            break
+
+
+def installed_config(user_data_dir: str) -> dict[str, dict[str, Any]]:
+    extension_path = "/usr/local/libexec/procvetaev-browser-harness/extensions/ublock-origin-lite/2026.812.1211"
+    values: dict[str, Any] = {
+        "browser.cloud_provider": "local",
+        "browser.cdp_url": "http://127.0.0.1:9222",
+        "browser.harness.executable": "/usr/bin/google-chrome-stable",
+        "browser.harness.user_data_dir": user_data_dir,
+        "browser.harness.profile_directory": "Default",
+        "browser.harness.extensions": [{
+            "id": "ddkjiahejlhfcafbddmgiahcphecmpfh",
+            "version": "2026.812.1211",
+            "path": extension_path,
+        }],
+    }
+    result = {key: {"present": True, "value": value} for key, value in values.items()}
+    result["browser.backend"] = {"present": False}
+    return result
+
+
+def tool_status(platform: str) -> dict[str, bool | None]:
+    result = subprocess.run(
+        ["hermes", "tools", "list", "--platform", platform],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    if result.returncode != 0:
+        return {name: None for name in TOOLSETS}
+    status: dict[str, bool | None] = {name: None for name in TOOLSETS}
+    for raw in result.stdout.splitlines():
+        line = raw.strip()
+        for name in TOOLSETS:
+            if name not in line.split():
+                continue
+            if " enabled " in f" {line} ":
+                status[name] = True
+            elif " disabled " in f" {line} ":
+                status[name] = False
+    return status
+
+
+def atomic_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, path)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+
+
+def capture(path: Path, user_data_dir: str) -> None:
+    if path.exists():
+        return
+    from hermes_cli.config import read_raw_config
+
+    config = read_raw_config() or {}
+    if not isinstance(config, dict):
+        raise RuntimeError("Hermes config root must be an object")
+    previous: dict[str, dict[str, Any]] = {}
+    for key in CONFIG_KEYS:
+        value = get_nested(config, key)
+        previous[key] = {"present": False} if value is MISSING else {"present": True, "value": value}
+    payload = {
+        "version": 1,
+        "previous_config": previous,
+        "installed_config": installed_config(user_data_dir),
+        "previous_toolsets": {platform: tool_status(platform) for platform in PLATFORMS},
+        "installed_toolsets": {platform: TOOLSETS for platform in PLATFORMS},
+    }
+    atomic_json(path, payload)
+
+
+def restore(path: Path) -> None:
+    if not path.is_file():
+        return
+    from hermes_cli.config import get_config_path, read_raw_config, require_readable_config_before_write
+    from utils import atomic_yaml_write
+
+    state = json.loads(path.read_text(encoding="utf-8"))
+    if state.get("version") != 1:
+        raise RuntimeError("Unsupported Browser Harness install-state version")
+    config_path = get_config_path()
+    require_readable_config_before_write(config_path)
+    config = read_raw_config() or {}
+    if not isinstance(config, dict):
+        raise RuntimeError("Hermes config root must be an object")
+    changed = False
+    for key, expected in state["installed_config"].items():
+        current = get_nested(config, key)
+        current_present = current is not MISSING
+        if current_present != bool(expected["present"]):
+            continue
+        if current_present and current != expected.get("value"):
+            continue
+        previous = state["previous_config"][key]
+        if previous["present"]:
+            set_nested(config, key, previous.get("value"))
+        else:
+            delete_nested(config, key)
+        changed = True
+    if changed:
+        atomic_yaml_write(config_path, config, sort_keys=False)
+
+    for platform, installed in state.get("installed_toolsets", {}).items():
+        current = tool_status(platform)
+        previous = state.get("previous_toolsets", {}).get(platform, {})
+        for name, installed_enabled in installed.items():
+            previous_enabled = previous.get(name)
+            if previous_enabled is None or current.get(name) != installed_enabled or previous_enabled == installed_enabled:
+                continue
+            action = "enable" if previous_enabled else "disable"
+            subprocess.run(["hermes", "tools", action, name, "--platform", platform], check=True)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="action", required=True)
+    capture_parser = subparsers.add_parser("capture")
+    capture_parser.add_argument("state_file", type=Path)
+    capture_parser.add_argument("user_data_dir")
+    restore_parser = subparsers.add_parser("restore")
+    restore_parser.add_argument("state_file", type=Path)
+    args = parser.parse_args()
+    if args.action == "capture":
+        capture(args.state_file, args.user_data_dir)
+    else:
+        restore(args.state_file)
+
+
+if __name__ == "__main__":
+    main()

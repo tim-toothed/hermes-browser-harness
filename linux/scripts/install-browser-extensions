@@ -1,0 +1,162 @@
+#!/usr/bin/env python3
+"""Verify and install the pinned Browser Harness extension payloads."""
+
+from __future__ import annotations
+
+import base64
+import argparse
+import hashlib
+import json
+import os
+import shutil
+import tempfile
+import zipfile
+from pathlib import Path, PurePosixPath, PureWindowsPath
+
+ROOT = Path(__file__).resolve().parent
+SERVICE_USER = os.environ.get("PROCVETAEV_BROWSER_USER", "procvetaev-browser")
+UBOL = {
+    "label": "uBlock Origin Lite",
+    "id": "ddkjiahejlhfcafbddmgiahcphecmpfh",
+    "version": "2026.812.1211",
+    "artifact": ROOT / "extension-artifacts/ublock-origin-lite/2026.812.1211/ublock-origin-lite-unpacked.zip",
+    "sha256": "fd910beea9e130ec63b8dc6a8a13e529fc2ab114f9e6e120c9ba36ccf01d1ce3",
+    "target": ROOT / "extensions/ublock-origin-lite/2026.812.1211/unpacked",
+    "manifest_version": 3,
+}
+
+
+def extension_id_from_key(key: str) -> str:
+    digest = hashlib.sha256(base64.b64decode(key, validate=True)).hexdigest()[:32]
+    return "".join(chr(ord("a") + int(nibble, 16)) for nibble in digest)
+
+
+def archive_files(archive: zipfile.ZipFile) -> list[zipfile.ZipInfo]:
+    files: list[zipfile.ZipInfo] = []
+    for member in archive.infolist():
+        posix = PurePosixPath(member.filename)
+        windows = PureWindowsPath(member.filename)
+        if posix.is_absolute() or windows.is_absolute() or ".." in posix.parts or ".." in windows.parts:
+            raise RuntimeError(f"Unsafe path in pinned extension archive: {member.filename}")
+        if posix.parts and posix.parts[0] == "_metadata":
+            continue
+        if not member.is_dir():
+            files.append(member)
+    return files
+
+
+def verify(spec: dict[str, object]) -> list[zipfile.ZipInfo]:
+    artifact = Path(spec["artifact"])
+    if not artifact.is_file():
+        raise RuntimeError(f"Pinned extension artifact is missing: {artifact}")
+    if hashlib.sha256(artifact.read_bytes()).hexdigest() != spec["sha256"]:
+        raise RuntimeError(f"Pinned {spec['label']} artifact checksum mismatch")
+    with zipfile.ZipFile(artifact) as archive:
+        files = archive_files(archive)
+        manifest = json.loads(archive.read("manifest.json"))
+    if manifest.get("version") != spec["version"]:
+        raise RuntimeError(f"Pinned {spec['label']} manifest version mismatch")
+    expected_manifest_version = spec["manifest_version"]
+    if expected_manifest_version is not None and manifest.get("manifest_version") != expected_manifest_version:
+        raise RuntimeError(f"Pinned {spec['label']} manifest format mismatch")
+    if extension_id_from_key(str(manifest.get("key", ""))) != spec["id"]:
+        raise RuntimeError(f"Pinned {spec['label']} extension ID mismatch")
+    return files
+
+
+def extracted_payload_matches(spec: dict[str, object]) -> bool:
+    artifact = Path(spec["artifact"])
+    target = Path(spec["target"])
+    if not target.is_dir():
+        return False
+    with zipfile.ZipFile(artifact) as archive:
+        files = archive_files(archive)
+        expected = {item.filename.rstrip("/") for item in files}
+        actual = {path.relative_to(target).as_posix() for path in target.rglob("*") if path.is_file()}
+        if actual != expected:
+            return False
+        return all(
+            hashlib.sha256((target / item.filename).read_bytes()).digest()
+            == hashlib.sha256(archive.read(item.filename)).digest()
+            for item in files
+        )
+
+
+def normalize_payload_permissions(target: Path) -> None:
+    paths = [target, *target.rglob("*")]
+    owner = None
+    if os.name != "nt":
+        import pwd
+
+        account = pwd.getpwnam(SERVICE_USER)
+        owner = (account.pw_uid, account.pw_gid)
+    for path in paths:
+        if owner is not None:
+            os.chown(path, *owner)
+        path.chmod(0o755 if path.is_dir() else 0o644)
+
+
+def install(spec: dict[str, object]) -> Path:
+    verify(spec)
+    artifact = Path(spec["artifact"])
+    target = Path(spec["target"])
+    if extracted_payload_matches(spec):
+        normalize_payload_permissions(target)
+        return target
+    if target.exists():
+        raise RuntimeError(f"Existing {spec['label']} payload differs from pinned artifact: {target}")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{target.name}-", dir=target.parent))
+    try:
+        with zipfile.ZipFile(artifact) as archive:
+            archive.extractall(staging)
+        metadata = staging / "_metadata"
+        if metadata.exists():
+            shutil.rmtree(metadata)
+        staged_spec = dict(spec)
+        staged_spec["target"] = staging
+        if not extracted_payload_matches(staged_spec):
+            raise RuntimeError(f"Extracted {spec['label']} payload verification failed")
+        normalize_payload_permissions(staging)
+        os.replace(staging, target)
+    finally:
+        if staging.exists():
+            shutil.rmtree(staging)
+    return target
+
+
+def configure_hermes(configured: list[dict[str, str]]) -> None:
+    from hermes_cli.config import get_config_path, read_raw_config, require_readable_config_before_write
+    from utils import atomic_yaml_write
+
+    config_path = get_config_path()
+    require_readable_config_before_write(config_path)
+    config = read_raw_config() or {}
+    if not isinstance(config, dict):
+        raise RuntimeError("Hermes config root must be an object")
+    browser = config.setdefault("browser", {})
+    if not isinstance(browser, dict):
+        raise RuntimeError("Hermes browser config must be an object")
+    harness = browser.setdefault("harness", {})
+    if not isinstance(harness, dict):
+        raise RuntimeError("Hermes Browser Harness config must be an object")
+    harness["extensions"] = configured
+    atomic_yaml_write(config_path, config, sort_keys=False)
+    readback = read_raw_config().get("browser", {}).get("harness", {}).get("extensions")
+    if readback != configured:
+        raise RuntimeError("Hermes extension config read-back failed")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--configure-hermes", action="store_true")
+    args = parser.parse_args()
+    path = install(UBOL)
+    configured = [{"id": UBOL["id"], "version": UBOL["version"], "path": str(path)}]
+    if args.configure_hermes:
+        configure_hermes(configured)
+    print(json.dumps(configured, ensure_ascii=False, separators=(",", ":")))
+
+
+if __name__ == "__main__":
+    main()

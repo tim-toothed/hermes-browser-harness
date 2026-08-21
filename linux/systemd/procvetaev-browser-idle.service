@@ -1,0 +1,6 @@
+[Unit]
+Description=Stop idle PROCVETAEV browser stack
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/procvetaev-browser-harness/browser-idle-check

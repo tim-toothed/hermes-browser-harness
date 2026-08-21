@@ -1,0 +1,31 @@
+{$BROWSER_SHARE_BIND:127.0.0.1}:{$BROWSER_SHARE_PORT:8791} {
+    tls /etc/procvetaev-browser/broker.crt /etc/procvetaev-browser/broker.key
+    encode gzip
+
+    @otp path_regexp share_otp ^/access/remote/[^/]+/?$
+    handle @otp {
+        reverse_proxy 127.0.0.1:8790
+    }
+
+    @otp_submit path_regexp otp_submit ^/v1/public/otp/[^/]+/?$
+    handle @otp_submit {
+        reverse_proxy 127.0.0.1:8790
+    }
+
+    @registration_proof path /v1/public/registration-proof
+    handle @registration_proof {
+        reverse_proxy 127.0.0.1:8790
+    }
+
+    @remote path_regexp share_remote ^/access/remote/([^/]+)(/.*)$
+    handle @remote {
+        forward_auth 127.0.0.1:8790 {
+            uri /v1/public/authorize
+            header_up X-Share-Token {http.regexp.share_remote.1}
+        }
+        rewrite * {http.regexp.share_remote.2}
+        reverse_proxy 127.0.0.1:6080
+    }
+
+    respond 404
+}

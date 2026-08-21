@@ -1,0 +1,39 @@
+source	destination	lifecycle
+skill/SKILL.md	$HERMES_HOME/skills/browser-harness/SKILL.md	package-owned
+skill/browser-profiles.json	$HERMES_HOME/skills/browser-harness/browser-profiles.json	create-if-missing; persistent
+-	$HERMES_HOME/skills/browser-harness/.linux-browser-harness-owned	package-owned marker
+-	$HERMES_HOME/skills/browser-harness/.linux-browser-harness-install-state.json	package-owned rollback state; mode 0600
+linux/scripts/procvetaev-browser-idle-check	/usr/local/libexec/procvetaev-browser-harness/browser-idle-check	package-owned
+linux/scripts/procvetaev-browser-share	/usr/local/libexec/procvetaev-browser-harness/browser-share	package-owned
+linux/scripts/browser-profile	/usr/local/libexec/procvetaev-browser-harness/browser-profile	package-owned
+linux/scripts/browser-chrome-launch	/usr/local/libexec/procvetaev-browser-harness/browser-chrome-launch	package-owned
+linux/scripts/install-browser-extensions	/usr/local/libexec/procvetaev-browser-harness/install-browser-extensions	package-owned
+linux/scripts/browser-install-state	/usr/local/libexec/procvetaev-browser-harness/browser-install-state	package-owned
+extensions/ublock-origin-lite/2026.812.1211/ublock-origin-lite-unpacked.zip	/usr/local/libexec/procvetaev-browser-harness/extension-artifacts/ublock-origin-lite/2026.812.1211/ublock-origin-lite-unpacked.zip	package-owned pinned artifact
+-	/usr/local/libexec/procvetaev-browser-harness/extensions	package-owned verified payloads
+linux/scripts/temporary-share/broker.py	/usr/local/libexec/procvetaev-browser-harness/temporary-share/broker.py	package-owned
+linux/scripts/temporary-share/core.py	/usr/local/libexec/procvetaev-browser-harness/temporary-share/core.py	package-owned
+linux/scripts/temporary-share/store.py	/usr/local/libexec/procvetaev-browser-harness/temporary-share/store.py	package-owned
+linux/caddy/procvetaev-browser-share.Caddyfile	/etc/caddy/procvetaev-browser-share.Caddyfile	package-owned
+linux/systemd/tmpfiles-procvetaev-browser.conf	/etc/tmpfiles.d/procvetaev-browser.conf	package-owned
+linux/systemd/procvetaev-*.service	/etc/systemd/system/procvetaev-*.service	package-owned
+linux/systemd/procvetaev-*.timer	/etc/systemd/system/procvetaev-*.timer	package-owned
+linux/systemd/procvetaev-browser.target	/etc/systemd/system/procvetaev-browser.target	package-owned
+linux/config/share.env.example	/etc/procvetaev-browser/.env	create-if-missing; persistent
+-	/var/lib/procvetaev-browser/chrome-args.json	node-specific Chrome flags; migrated/create-if-needed; persistent
+-	/etc/procvetaev-browser/share.pepper	create-if-missing; persistent
+-	/etc/procvetaev-browser/broker.crt	node input; persistent
+-	/etc/procvetaev-browser/broker.key	node input; persistent
+-	/var/lib/procvetaev-browser/chrome-profile	persistent
+-	/var/lib/procvetaev-browser/profiles/*	persistent managed profiles
+-	/var/lib/procvetaev-browser-share/shares.sqlite	persistent
+-	procvetaev-browser user/group	created; retained on uninstall with persistent profile
+-	browser.cloud_provider,browser.cdp_url,browser.harness.*	package-owned Hermes config; previous values conditionally restored on uninstall
+legacy	browser.backend	deprecated config removed during migration; previous value conditionally restored on uninstall
+legacy	/usr/local/bin/browser-harness	remove only when linked to old skill wrapper
+legacy	/root/.local/bin/browser-harness	remove only when linked to old skill wrapper
+legacy	/root/.local/bin/browser-harness-real	remove only with global uv browser-harness 0.1.8
+legacy	$HERMES_HOME/skills/browser-harness	move unowned directory to a timestamped backup before installing package-owned skill
+legacy	/usr/local/libexec/procvetaev-browser-idle-check	remove old script
+legacy	/usr/local/libexec/procvetaev-browser-share	remove old script
+legacy	/etc/systemd/system/procvetaev-chrome.service.d/temporary-d1-socks.conf	migrate only proven static-profile drop-in to persistent chrome-args.json

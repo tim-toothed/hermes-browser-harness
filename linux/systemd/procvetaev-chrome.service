@@ -1,0 +1,18 @@
+[Unit]
+Description=PROCVETAEV dedicated Google Chrome
+Requires=procvetaev-xvfb.service
+After=procvetaev-xvfb.service procvetaev-openbox.service
+PartOf=procvetaev-browser.target
+
+[Service]
+Type=simple
+User=procvetaev-browser
+Group=procvetaev-browser
+Environment=HOME=/var/lib/procvetaev-browser
+Environment=DISPLAY=:99
+ExecStartPre=+/usr/local/libexec/procvetaev-browser-harness/browser-profile prepare
+ExecStart=/usr/local/libexec/procvetaev-browser-harness/browser-chrome-launch
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=20
+KillMode=mixed

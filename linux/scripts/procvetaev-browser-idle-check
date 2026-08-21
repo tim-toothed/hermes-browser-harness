@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+RUNTIME_DIR=/run/procvetaev-browser
+STAMP="$RUNTIME_DIR/last-activity"
+LOCK="$RUNTIME_DIR/activity.lock"
+ENV_FILE=/etc/procvetaev-browser/.env
+BROWSER_IDLE_SECONDS=7200
+
+if [[ -r "$ENV_FILE" ]]; then
+  # shellcheck disable=SC1091
+  . "$ENV_FILE"
+fi
+[[ "$BROWSER_IDLE_SECONDS" =~ ^[0-9]+$ ]] || exit 1
+systemctl is-active --quiet procvetaev-browser.target || exit 0
+
+install -d -m 0755 "$RUNTIME_DIR"
+if systemctl is-active --quiet procvetaev-browser-share.service; then
+  touch "$STAMP"
+  exit 0
+fi
+[[ -e "$STAMP" ]] || { touch "$STAMP"; exit 0; }
+
+exec 9>"$LOCK"
+flock -n -x 9 || exit 0
+now=$(date +%s)
+last=$(stat -c %Y "$STAMP")
+(( now - last >= BROWSER_IDLE_SECONDS )) || exit 0
+
+systemctl stop procvetaev-browser-share.service procvetaev-novnc.service procvetaev-x11vnc.service procvetaev-browser.target >/dev/null 2>&1 || true
+pkill -TERM -f '[p]ython.*-m browser_harness.daemon' >/dev/null 2>&1 || true
+rm -f "$STAMP"

@@ -1,0 +1,17 @@
+* text=auto eol=lf
+
+*.sh text eol=lf
+linux/scripts/* text eol=lf
+linux/scripts/temporary-share/*.py text eol=lf
+linux/systemd/* text eol=lf
+linux/caddy/* text eol=lf
+linux/config/* text eol=lf
+*.py text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.tsv text eol=lf
+*.zip binary
+*.crx binary

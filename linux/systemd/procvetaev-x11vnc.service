@@ -1,0 +1,15 @@
+[Unit]
+Description=PROCVETAEV loopback VNC server
+Requires=procvetaev-xvfb.service
+After=procvetaev-xvfb.service
+PartOf=procvetaev-browser.target procvetaev-browser-share.service
+
+[Service]
+Type=simple
+User=procvetaev-browser
+Group=procvetaev-browser
+Environment=HOME=/var/lib/procvetaev-browser
+ExecStart=/usr/bin/x11vnc -display :99 -rfbport 5900 -localhost -forever -shared -nopw -noxdamage
+Restart=on-failure
+RestartSec=2
+KillSignal=SIGINT

@@ -1,0 +1,5 @@
+[Unit]
+Description=PROCVETAEV headed browser stack
+Requires=procvetaev-xvfb.service procvetaev-openbox.service procvetaev-chrome.service
+After=network-online.target procvetaev-xvfb.service
+Wants=network-online.target

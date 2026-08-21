@@ -1,0 +1,10 @@
+{
+  "default": "agent",
+  "profiles": {
+    "agent": {
+      "label": "Основной профиль",
+      "description": "Основной профиль Browser Harness",
+      "user_data_dir": "/var/lib/procvetaev-browser/chrome-profile"
+    }
+  }
+}

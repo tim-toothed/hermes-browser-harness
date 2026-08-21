@@ -1,0 +1,11 @@
+google-chrome-stable=current official repository candidate
+xvfb=distribution package
+openbox=distribution package
+x11vnc=distribution package
+novnc=distribution package
+websockify=distribution package
+caddy=distribution package
+curl=distribution package
+ca-certificates=distribution package
+
+Browser Harness Python runtime is bundled and locked at 0.1.9 under runtime/uv.lock. No global browser-harness installation is used.

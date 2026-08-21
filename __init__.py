@@ -9,10 +9,10 @@ def _handle_browser_exec(args: dict, **kwargs):
 
 
 def register(ctx) -> None:
-    """Replace the built-in browser_exec without modifying Hermes core."""
+    """Expose Browser Harness independently from Hermes' built-in browser toolset."""
     ctx.register_tool(
         name="browser_exec",
-        toolset="browser",
+        toolset="browser_harness",
         schema=BROWSER_EXEC_SCHEMA,
         handler=_handle_browser_exec,
         check_fn=is_available,
