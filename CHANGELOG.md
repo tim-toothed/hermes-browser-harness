@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.8
+
+- Linux installer now fails before mutation when legacy Chrome units, target symlinks, or multiple running profile roots would violate the single-instance contract.
+- Reinstallation accepts only Chrome-generated `_metadata` drift in the pinned unpacked uBOL directory while still rejecting any shipped payload change.
+
 ## 1.4.7 - 2026-08-21
 
 - Require the `browser-harness` plugin to be enabled with explicit tool-override consent before any privileged Linux host mutation.

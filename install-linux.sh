@@ -46,6 +46,57 @@ HERMES_HOME=${HERMES_HOME:-/root/.hermes}
 SERVICE_USER=procvetaev-browser
 SERVICE_HOME=/var/lib/procvetaev-browser
 
+# Fail before package installation or file mutation when a legacy deployment
+# can make the managed target start more than one Chrome instance.
+python3 - <<'PY'
+import pathlib
+import subprocess
+
+canonical = "procvetaev-chrome.service"
+blockers = []
+wants = pathlib.Path("/etc/systemd/system/procvetaev-browser.target.wants")
+if wants.is_dir():
+    for entry in wants.iterdir():
+        if "chrome" in entry.name.lower() and entry.name != canonical:
+            blockers.append(f"target-wants:{entry.name}")
+
+for unit_path in pathlib.Path("/etc/systemd/system").glob("procvetaev-chrome*.service"):
+    unit = unit_path.name
+    if unit == canonical:
+        continue
+    enabled = subprocess.run(
+        ["systemctl", "is-enabled", unit], capture_output=True, text=True
+    ).stdout.strip()
+    active = subprocess.run(
+        ["systemctl", "is-active", unit], capture_output=True, text=True
+    ).stdout.strip()
+    if enabled not in {"", "disabled", "static", "indirect", "not-found"} or active == "active":
+        blockers.append(f"unit:{unit}:enabled={enabled}:active={active}")
+
+roots = set()
+ports = set()
+for process in pathlib.Path("/proc").glob("[0-9]*"):
+    try:
+        argv = [part.decode(errors="replace") for part in (process / "cmdline").read_bytes().split(b"\0") if part]
+    except (FileNotFoundError, PermissionError, ProcessLookupError):
+        continue
+    if not argv or "chrome" not in pathlib.Path(argv[0]).name.lower():
+        continue
+    for arg in argv:
+        if arg.startswith("--user-data-dir="):
+            roots.add(arg.split("=", 1)[1])
+        elif arg.startswith("--remote-debugging-port="):
+            ports.add(arg.split("=", 1)[1])
+if len(roots) > 1 or len(ports) > 1:
+    blockers.append(f"running-chrome:user-data-dirs={len(roots)}:cdp-ports={len(ports)}")
+
+if blockers:
+    raise SystemExit(
+        "refusing multi-instance Chrome migration; disable legacy Chrome units first: "
+        + ", ".join(sorted(set(blockers)))
+    )
+PY
+
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y xvfb openbox x11vnc novnc websockify caddy curl ca-certificates
@@ -87,7 +138,7 @@ restore_unowned_skill() {
 if [[ -d "$HERMES_HOME/skills/browser-harness" && ! -f "$HERMES_HOME/skills/browser-harness/.linux-browser-harness-owned" ]]; then
   backup_root="$HERMES_HOME/backups"
   install -d -o root -g root -m 0700 "$backup_root"
-  unowned_skill_backup="$backup_root/browser-harness.pre-1.4.7.$(date +%Y%m%d%H%M%S).$$"
+  unowned_skill_backup="$backup_root/browser-harness.pre-1.4.8.$(date +%Y%m%d%H%M%S).$$"
   mv -- "$HERMES_HOME/skills/browser-harness" "$unowned_skill_backup"
   trap restore_unowned_skill EXIT
 fi
@@ -196,7 +247,7 @@ if [[ -n "$unowned_skill_backup" && -f "$unowned_skill_backup/browser-profiles.j
 elif [[ ! -f "$HERMES_HOME/skills/browser-harness/browser-profiles.json" ]]; then
   install -m 0644 "$ROOT/skill/browser-profiles.json" "$HERMES_HOME/skills/browser-harness/browser-profiles.json"
 fi
-printf '%s\n' 'browser-harness-linux 1.4.7' > "$HERMES_HOME/skills/browser-harness/.linux-browser-harness-owned"
+printf '%s\n' 'browser-harness-linux 1.4.8' > "$HERMES_HOME/skills/browser-harness/.linux-browser-harness-owned"
 for unit in "$LINUX"/systemd/procvetaev-*.service "$LINUX"/systemd/procvetaev-*.timer "$LINUX"/systemd/procvetaev-browser.target; do
   install -m 0644 "$unit" "/etc/systemd/system/$(basename "$unit")"
 done

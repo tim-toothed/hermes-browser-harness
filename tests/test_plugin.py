@@ -71,6 +71,30 @@ class BrowserHarnessPluginTests(unittest.TestCase):
             with zipfile.ZipFile(archive_path) as archive:
                 self.assertEqual([item.filename for item in module.archive_files(archive)], ["manifest.json"])
 
+    def test_extension_payload_match_ignores_only_generated_metadata(self):
+        loader = importlib.machinery.SourceFileLoader(
+            "extension_installer_generated_metadata", str(PLUGIN_DIR / "linux/scripts/install-browser-extensions")
+        )
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        module = importlib.util.module_from_spec(spec)
+        loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            archive_path = root / "extension.zip"
+            target = root / "unpacked"
+            target.mkdir()
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                archive.writestr("manifest.json", '{"version":"1"}')
+                archive.writestr("_metadata/verified_contents.json", "pinned")
+            (target / "manifest.json").write_text('{"version":"1"}', encoding="utf-8")
+            metadata = target / "_metadata"
+            metadata.mkdir()
+            (metadata / "generated_indexed_ruleset").write_text("chrome-generated", encoding="utf-8")
+            payload = {"artifact": archive_path, "target": target}
+            self.assertTrue(module.extracted_payload_matches(payload))
+            (target / "manifest.json").write_text('{"version":"changed"}', encoding="utf-8")
+            self.assertFalse(module.extracted_payload_matches(payload))
+
     def test_registers_existing_browser_exec_in_exclusive_plugin_toolset(self):
         plugin = load_plugin_module()
         ctx = FakeContext()

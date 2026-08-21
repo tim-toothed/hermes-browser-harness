@@ -2,7 +2,7 @@
 
 Cross-platform Hermes Agent plugin with a bundled, version-locked Browser Harness runtime and a production Linux host package.
 
-- Plugin: **1.4.6**
+- Plugin: **1.4.8**
 - Browser Harness runtime: **0.1.9**
 - Model-facing tool: plugin-owned `browser_exec` in the dedicated `browser_harness` toolset
 - Browser transport: one managed Chrome through loopback CDP

@@ -86,6 +86,15 @@ class InstallStateTests(unittest.TestCase):
         self.assertLess(preflight, first_mutation)
         self.assertIn('run: hermes plugins enable browser-harness --allow-tool-override', installer)
 
+    def test_host_installer_refuses_multi_instance_chrome_before_mutation(self):
+        installer = (ROOT / "install-linux.sh").read_text(encoding="utf-8")
+        preflight = installer.index("refusing multi-instance Chrome migration")
+        first_mutation = installer.index("apt-get update -qq")
+        self.assertLess(preflight, first_mutation)
+        self.assertIn("procvetaev-browser.target.wants", installer)
+        self.assertIn("--user-data-dir=", installer)
+        self.assertIn("--remote-debugging-port=", installer)
+
     def test_remote_access_requires_target_and_owns_one_tab(self):
         broker = (SHARE / "broker.py").read_text(encoding="utf-8")
         skill = (ROOT / "skill" / "SKILL.md").read_text(encoding="utf-8")

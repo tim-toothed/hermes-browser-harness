@@ -1,5 +1,5 @@
 name: browser-harness
-version: 1.4.7
+version: 1.4.8
 description: Browser Harness 0.1.9 with managed Chrome and Linux host lifecycle
 author: Timur Sharifullin (PROCVETAEV)
 kind: standalone

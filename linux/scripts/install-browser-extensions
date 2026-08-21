@@ -72,7 +72,11 @@ def extracted_payload_matches(spec: dict[str, object]) -> bool:
     with zipfile.ZipFile(artifact) as archive:
         files = archive_files(archive)
         expected = {item.filename.rstrip("/") for item in files}
-        actual = {path.relative_to(target).as_posix() for path in target.rglob("*") if path.is_file()}
+        actual = {
+            path.relative_to(target).as_posix()
+            for path in target.rglob("*")
+            if path.is_file() and path.relative_to(target).parts[0] != "_metadata"
+        }
         if actual != expected:
             return False
         return all(
