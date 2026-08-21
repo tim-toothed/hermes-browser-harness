@@ -2,7 +2,7 @@
 
 Cross-platform Hermes Agent plugin with a bundled, version-locked Browser Harness runtime and a production Linux host package.
 
-- Plugin: **1.4.5**
+- Plugin: **1.4.6**
 - Browser Harness runtime: **0.1.9**
 - Model-facing tool: plugin-owned `browser_exec` in the dedicated `browser_harness` toolset
 - Browser transport: one managed Chrome through loopback CDP
@@ -89,11 +89,22 @@ Configure `/etc/procvetaev-browser/.env` explicitly before using Remote Access:
 
 ```dotenv
 SHARE_AUTH_BASE_URL=https://your-auth-gateway.example
+SHARE_MAX_TTL_SECONDS=1800
 BROWSER_SHARE_BIND=127.0.0.1
 BROWSER_SHARE_PORT=8791
 ```
 
-Keep the default loopback bind unless a protected private ingress must reach Caddy. Any broader bind is an explicit deployment decision.
+Keep the default loopback bind unless the central AUTH gateway connects directly to this VPS. For that deployment, set `BROWSER_SHARE_BIND=0.0.0.0` and restrict port `8791` to the trusted ingress path with the host/provider firewall. The central gateway must accept a route TTL of at least `1800` seconds. Any broader bind is an explicit deployment decision; it is never enabled by the package default.
+
+Creating Remote Access requires a concrete target and opens one owned Chrome tab:
+
+```bash
+curl -fsS -X POST http://127.0.0.1:8790/v1/shares \
+  -H 'Content-Type: application/json' \
+  --data '{"kind":"remote_access","target_url":"https://target.example/","ttl_seconds":1800}'
+```
+
+Revoke, expiry, and replacement close only that owned tab. Existing manual tabs and unrelated `browser_exec` tabs are preserved. The broker waits for the Caddy listener to become reachable before registering the temporary route with AUTH.
 
 ## CAPTCHA boundary
 
@@ -105,7 +116,7 @@ See [`docs/PLATFORM_PARITY.md`](docs/PLATFORM_PARITY.md) for the complete Linux 
 
 Release changes are recorded in [`CHANGELOG.md`](CHANGELOG.md).
 
-The main remaining Windows parity work is to deploy and verify the `1.4.5` dedicated-toolset boundary and run the same-profile concurrency test there. Historical Windows installers are not the source for new installations.
+The main remaining Windows parity work is to deploy and verify the `1.4.6` dedicated-toolset boundary and run the same-profile concurrency test there. Historical Windows installers are not the source for new installations.
 
 ## Development
 

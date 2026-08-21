@@ -45,7 +45,7 @@
 
 - Windows cold-start запускает Chrome непосредственно как detached process, без systemd/X11/Remote Access stack.
 - Windows Preferences/download path используют Windows filesystem semantics.
-- Historical public standalone plugin `1.3.1` регистрировал `browser_exec` в toolset `browser`. Public source `1.4.5` исправлен; Windows deployment и real-agent read-back ещё не выполнены.
+- Historical public standalone plugin `1.3.1` регистрировал `browser_exec` в toolset `browser`. Public source `1.4.6` исправлен; Windows deployment и real-agent read-back ещё не выполнены.
 - B2 same-profile concurrent cron behavior на Windows не проверен.
 - Historical Windows NopeCHA state не переносится в Linux package. Linux package управляет только uBlock; CAPTCHA extension/configuration отложены.
 - Старые Windows installer artifacts не являются источником для новых установок; новый Windows lifecycle должен адаптировать принятый Linux process по этапам.

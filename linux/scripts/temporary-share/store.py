@@ -28,7 +28,7 @@ def locked(method: Callable[..., T]) -> Callable[..., T]:
 class ShareStore:
     """Атомарное хранилище заявок для локального broker."""
 
-    def __init__(self, database: str | Path, pepper: bytes, maximum_ttl: int = 600):
+    def __init__(self, database: str | Path, pepper: bytes, maximum_ttl: int = 1800):
         if not pepper:
             raise ValueError("pepper is required")
         self.database = str(database)
@@ -91,6 +91,13 @@ class ShareStore:
         return None
 
     @locked
+    def metadata(self, share_id: str) -> dict:
+        row = self._connection.execute(
+            "SELECT metadata_json FROM shares WHERE share_id = ?", (share_id,)
+        ).fetchone()
+        return json.loads(row["metadata_json"] or "{}") if row else {}
+
+    @locked
     def has_open(self, kind: ShareKind | None = None) -> bool:
         if kind is None:
             row = self._connection.execute("SELECT 1 FROM shares WHERE state = ? LIMIT 1", (ShareState.OPEN.value,)).fetchone()
@@ -143,10 +150,21 @@ class ShareStore:
         return cursor.rowcount == 1
 
     @locked
-    def expire_due(self, now: datetime | None = None) -> int:
-        cursor = self._connection.execute("UPDATE shares SET state = ? WHERE state = ? AND expires_at <= ?", (ShareState.EXPIRED.value, ShareState.OPEN.value, (now or datetime.now(timezone.utc)).isoformat()))
+    def expire_due(self, now: datetime | None = None) -> list[tuple[str, dict]]:
+        deadline = (now or datetime.now(timezone.utc)).isoformat()
+        rows = self._connection.execute(
+            "SELECT share_id, metadata_json FROM shares WHERE state = ? AND expires_at <= ?",
+            (ShareState.OPEN.value, deadline),
+        ).fetchall()
+        self._connection.execute(
+            "UPDATE shares SET state = ? WHERE state = ? AND expires_at <= ?",
+            (ShareState.EXPIRED.value, ShareState.OPEN.value, deadline),
+        )
         self._connection.commit()
-        return cursor.rowcount
+        return [
+            (row["share_id"], json.loads(row["metadata_json"] or "{}"))
+            for row in rows
+        ]
 
     @staticmethod
     def _row_to_record(row: sqlite3.Row) -> ShareRecord:

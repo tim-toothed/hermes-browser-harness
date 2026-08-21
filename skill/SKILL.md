@@ -54,7 +54,7 @@ Create access only when the user explicitly requests to see/control the browser 
 ```bash
 curl -fsS -X POST http://127.0.0.1:8790/v1/shares \
   -H 'Content-Type: application/json' \
-  --data '{"kind":"remote_access","ttl_seconds":600}'
+  --data '{"kind":"remote_access","target_url":"https://target.example/","ttl_seconds":1800}'
 ```
 
 Return only the resulting public URL and OTP. Never place the OTP in the URL or logs. Remote Access exposes the same managed Chrome/display used by `browser_exec`; it must not start another Chrome profile.
@@ -65,4 +65,4 @@ Revoke when requested:
 curl -fsS -X POST http://127.0.0.1:8790/v1/shares/<share_id>/revoke
 ```
 
-Revocation closes only human access. Browser automation remains active and the browser later stops through the idle lifecycle.
+Each share owns one Chrome target opened at `target_url`. Revocation, expiry, or a replacement share closes only that owned target. Other Browser Harness and manually opened tabs remain untouched; browser automation and the managed Chrome lifecycle stay active.

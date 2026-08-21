@@ -37,7 +37,7 @@ case "${1:-}" in
       || fail "managed Chrome did not expose CDP; refusing black Remote Access session"
     systemctl start "$SERVICE"
     systemctl restart "$TIMER"
-    printf '%s\n' "opened for 10 minutes"
+    printf '%s\n' "opened for 30 minutes"
     ;;
   close)
     systemctl stop "$TIMER" >/dev/null 2>&1 || true

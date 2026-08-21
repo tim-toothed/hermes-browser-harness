@@ -56,7 +56,7 @@ def hash_token(token: str, pepper: bytes) -> str:
     return hmac.new(pepper, token.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
-def clamp_ttl(ttl_seconds: int, maximum_seconds: int = 600) -> int:
+def clamp_ttl(ttl_seconds: int, maximum_seconds: int = 1800) -> int:
     """Ограничивает TTL серверным максимумом и отбрасывает невалидные значения."""
     if maximum_seconds <= 0:
         raise ValueError("maximum_seconds must be positive")
@@ -65,7 +65,7 @@ def clamp_ttl(ttl_seconds: int, maximum_seconds: int = 600) -> int:
     return min(ttl_seconds, maximum_seconds)
 
 
-def new_expiry(ttl_seconds: int, maximum_seconds: int = 600) -> datetime:
+def new_expiry(ttl_seconds: int, maximum_seconds: int = 1800) -> datetime:
     """Вычисляет абсолютный expiry timestamp в UTC."""
     return datetime.now(timezone.utc) + timedelta(
         seconds=clamp_ttl(ttl_seconds, maximum_seconds)

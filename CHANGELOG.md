@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.4.6 — 2026-08-21
+
+### Changed
+
+- Remote Access authorization lifetime is 30 minutes (`1800` seconds).
+- Remote Access creation requires an absolute HTTP(S) `target_url` and opens one dedicated owned Chrome tab.
+
+### Fixed
+
+- Revoke, expiry, replacement, and failed AUTH registration close only the Remote Access-owned tab while preserving manual and unrelated Browser Harness tabs.
+- Caddy uses the stable `vps-broker.local` TLS identity with a separate safe-default `bind` directive.
+- The broker waits for the Caddy listener socket before central AUTH route registration, removing the startup race behind intermittent noVNC connection failures.
+- Expiry revokes the central route, removes only matching sessions, and shuts down the temporary noVNC stack when no shares remain.
+
+### Deployment note
+
+- Direct central ingress must explicitly set `BROWSER_SHARE_BIND=0.0.0.0` and protect port `8791`; the package default remains loopback.
+- The central AUTH gateway must allow at least `1800` seconds for temporary-route registration.
+
 ## 1.4.5 — 2026-08-21
 
 ### Added

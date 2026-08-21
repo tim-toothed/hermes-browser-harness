@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 from importlib.machinery import SourceFileLoader
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 import os
@@ -43,6 +44,21 @@ class ShareStoreConcurrencyTests(unittest.TestCase):
             self.assertEqual(outcomes.count(True), 1)
             store.close()
 
+    def test_expiry_returns_owned_target_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = ShareStore(Path(directory) / "shares.sqlite", b"test-pepper")
+            record, _token = store.create(
+                ShareKind.REMOTE_ACCESS,
+                1800,
+                {"target": "local-browser", "browser_target_id": "owned-tab"},
+            )
+            expired = store.expire_due(datetime.now(timezone.utc) + timedelta(hours=1))
+            self.assertEqual(expired, [(record.share_id, {
+                "target": "local-browser",
+                "browser_target_id": "owned-tab",
+            })])
+            store.close()
+
 
 class InstallStateTests(unittest.TestCase):
     @classmethod
@@ -60,11 +76,26 @@ class InstallStateTests(unittest.TestCase):
         env_example = (ROOT / "linux" / "config" / "share.env.example").read_text(encoding="utf-8")
         self.assertIn("SHARE_AUTH_BASE_URL=\n", env_example)
         self.assertIn("BROWSER_SHARE_BIND=127.0.0.1", env_example)
+        self.assertIn("SHARE_MAX_TTL_SECONDS=1800", env_example)
         self.assertNotIn("auth.procvetaev.space", env_example)
+
+    def test_remote_access_requires_target_and_owns_one_tab(self):
+        broker = (SHARE / "broker.py").read_text(encoding="utf-8")
+        skill = (ROOT / "skill" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn('validate_target_url(payload.get("target_url"))', broker)
+        self.assertIn('"browser_target_id": browser_target_id', broker)
+        self.assertIn("close_owned_target(metadata)", broker)
+        self.assertIn('"target_url":"https://target.example/","ttl_seconds":1800', skill)
 
     def test_caddy_defaults_to_loopback(self):
         caddy = (ROOT / "linux" / "caddy" / "procvetaev-browser-share.Caddyfile").read_text(encoding="utf-8")
-        self.assertIn("{$BROWSER_SHARE_BIND:127.0.0.1}:{$BROWSER_SHARE_PORT:8791}", caddy)
+        self.assertIn("https://vps-broker.local:{$BROWSER_SHARE_PORT:8791}", caddy)
+        self.assertIn("bind {$BROWSER_SHARE_BIND:127.0.0.1}", caddy)
+
+    def test_broker_waits_for_listener_socket_before_auth_registration(self):
+        broker = (SHARE / "broker.py").read_text(encoding="utf-8")
+        self.assertIn('socket.create_connection(("127.0.0.1"', broker)
+        self.assertIn("browser share listener did not become ready", broker)
 
     def test_capture_restore_roundtrip_preserves_preinstall_config(self):
         with tempfile.TemporaryDirectory() as directory:

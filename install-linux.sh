@@ -189,7 +189,7 @@ if [[ -n "$unowned_skill_backup" && -f "$unowned_skill_backup/browser-profiles.j
 elif [[ ! -f "$HERMES_HOME/skills/browser-harness/browser-profiles.json" ]]; then
   install -m 0644 "$ROOT/skill/browser-profiles.json" "$HERMES_HOME/skills/browser-harness/browser-profiles.json"
 fi
-printf '%s\n' 'browser-harness-linux 1.4.5' > "$HERMES_HOME/skills/browser-harness/.linux-browser-harness-owned"
+printf '%s\n' 'browser-harness-linux 1.4.6' > "$HERMES_HOME/skills/browser-harness/.linux-browser-harness-owned"
 for unit in "$LINUX"/systemd/procvetaev-*.service "$LINUX"/systemd/procvetaev-*.timer "$LINUX"/systemd/procvetaev-browser.target; do
   install -m 0644 "$unit" "/etc/systemd/system/$(basename "$unit")"
 done

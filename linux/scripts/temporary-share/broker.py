@@ -14,11 +14,12 @@ import json
 import os
 from pathlib import Path
 import secrets
+import socket
 import subprocess
 import sys
 import threading
 import time
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parent
@@ -30,7 +31,8 @@ BIND = os.getenv("SHARE_BROKER_BIND", "127.0.0.1")
 PORT = int(os.getenv("SHARE_BROKER_PORT", "8790"))
 DB = os.getenv("SHARE_BROKER_DB", "/var/lib/procvetaev-browser-share/shares.sqlite")
 PEPPER_FILE = os.getenv("SHARE_BROKER_PEPPER_FILE", "/etc/procvetaev-browser/share.pepper")
-MAX_TTL = int(os.getenv("SHARE_MAX_TTL_SECONDS", "600"))
+MAX_TTL = int(os.getenv("SHARE_MAX_TTL_SECONDS", "1800"))
+CDP_URL = os.getenv("BROWSER_CDP_URL", "http://127.0.0.1:9222").rstrip("/")
 AUTH_BASE_URL = os.getenv("SHARE_AUTH_BASE_URL", "").rstrip("/")
 REGISTRATION_URL = os.getenv("SHARE_REGISTRATION_URL", f"{AUTH_BASE_URL}/v1/share/register" if AUTH_BASE_URL else "")
 REVOCATION_URL = os.getenv("SHARE_REVOCATION_URL", f"{AUTH_BASE_URL}/v1/share/revoke" if AUTH_BASE_URL else "")
@@ -63,6 +65,66 @@ def listener(action: str, *, check: bool = False) -> None:
     )
     if check and result.returncode != 0:
         raise RuntimeError("browser share listener failed to start")
+    if action == "start" and check:
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            try:
+                with socket.create_connection(("127.0.0.1", int(os.getenv("BROWSER_SHARE_PORT", "8791"))), timeout=1):
+                    return
+            except OSError:
+                time.sleep(0.2)
+        raise RuntimeError("browser share listener did not become ready")
+
+
+def ensure_browser_ready(timeout: float = 20.0) -> None:
+    subprocess.run(
+        ["systemctl", "start", "procvetaev-browser.target", "procvetaev-chrome.service"],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            with urlopen(f"{CDP_URL}/json/version", timeout=1) as response:
+                if response.status == HTTPStatus.OK:
+                    return
+        except Exception:
+            time.sleep(0.2)
+    raise RuntimeError("managed Chrome did not expose CDP")
+
+
+def validate_target_url(value: object) -> str:
+    target_url = str(value or "").strip()
+    parsed = urlparse(target_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.username or parsed.password:
+        raise ValueError("target_url must be an absolute HTTP(S) URL without credentials")
+    return target_url
+
+
+def create_browser_target(target_url: str) -> str:
+    request = Request(f"{CDP_URL}/json/new?{quote(target_url, safe='')}", method="PUT")
+    with urlopen(request, timeout=10) as response:
+        payload = json.loads(response.read())
+    target_id = str(payload.get("id") or "").strip()
+    if not target_id:
+        raise RuntimeError("Chrome did not return a target id")
+    return target_id
+
+
+def close_browser_target(target_id: str) -> None:
+    if not target_id:
+        return
+    try:
+        with urlopen(f"{CDP_URL}/json/close/{quote(target_id, safe='')}", timeout=5):
+            pass
+    except Exception:
+        # A user or Chrome may already have closed the owned target.
+        pass
+
+
+def close_owned_target(metadata: dict) -> None:
+    close_browser_target(str(metadata.get("browser_target_id") or ""))
 
 
 def register_session(token: str, share_id: str, expires_at: float) -> None:
@@ -109,8 +171,17 @@ def expire_loop() -> None:
         time.sleep(1)
         expired = store.expire_due()
         if expired:
+            expired_ids = {share_id for share_id, _metadata in expired}
+            for share_id, metadata in expired:
+                close_owned_target(metadata)
+                try:
+                    revoke_registration(share_id)
+                except Exception:
+                    pass
             with sessions_lock:
-                sessions.clear()
+                for session, (share_id, _expires) in list(sessions.items()):
+                    if share_id in expired_ids:
+                        sessions.pop(session, None)
             if not store.has_open(ShareKind.REMOTE_ACCESS):
                 listener("stop")
 
@@ -206,6 +277,7 @@ class BrokerHandler(BaseHTTPRequestHandler):
         if not AUTH_BASE_URL.startswith("https://"):
             raise ValueError("Remote Access is not configured: set an HTTPS SHARE_AUTH_BASE_URL")
         target = "local-browser"
+        target_url = validate_target_url(payload.get("target_url"))
         ttl = int(payload.get("ttl_seconds", MAX_TTL))
         metadata = payload.get("metadata") or {}
         if not isinstance(metadata, dict):
@@ -214,7 +286,9 @@ class BrokerHandler(BaseHTTPRequestHandler):
         # На VPS один локальный Browser Harness: новая заявка закрывает старую.
         active = store.active_for_target(target)
         if active:
+            active_metadata = store.metadata(active.share_id)
             store.revoke(active.share_id)
+            close_owned_target(active_metadata)
             try:
                 revoke_registration(active.share_id)
             except Exception:
@@ -224,7 +298,19 @@ class BrokerHandler(BaseHTTPRequestHandler):
                     if share_id == active.share_id:
                         sessions.pop(session, None)
 
-        record, token = store.create(kind, ttl, {"target": target, **metadata})
+        browser_target_id = ""
+        try:
+            ensure_browser_ready()
+            browser_target_id = create_browser_target(target_url)
+            record, token = store.create(kind, ttl, {
+                **metadata,
+                "target": target,
+                "target_url": target_url,
+                "browser_target_id": browser_target_id,
+            })
+        except Exception:
+            close_browser_target(browser_target_id)
+            raise ValueError("browser target creation failed")
         result = {
             "share_id": record.share_id,
             "public_token": token,
@@ -240,13 +326,16 @@ class BrokerHandler(BaseHTTPRequestHandler):
                     register_session(token, record.share_id, record.expires_at.timestamp())
             except Exception:
                 store.revoke(record.share_id)
+                close_browser_target(browser_target_id)
                 listener("stop")
                 raise ValueError("browser share startup or AUTH registration failed")
             result["otp"] = otp
         json_response(self, HTTPStatus.CREATED, result)
 
     def revoke_share(self, share_id: str) -> None:
+        metadata = store.metadata(share_id)
         changed = store.revoke(share_id)
+        close_owned_target(metadata)
         with sessions_lock:
             for session, (owned_id, _expires) in list(sessions.items()):
                 if owned_id == share_id:

@@ -1,4 +1,5 @@
-{$BROWSER_SHARE_BIND:127.0.0.1}:{$BROWSER_SHARE_PORT:8791} {
+https://vps-broker.local:{$BROWSER_SHARE_PORT:8791} {
+    bind {$BROWSER_SHARE_BIND:127.0.0.1}
     tls /etc/procvetaev-browser/broker.crt /etc/procvetaev-browser/broker.key
     encode gzip
 
