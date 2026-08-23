@@ -69,7 +69,7 @@ Hermes model
   → one managed Chrome
 ```
 
-`browser_exec` accepts Python using Browser Harness helpers. Browser state and workspace persist across calls, but Python variables do not. After each script, including an exception path, the runtime preserves the current ordinary page and closes every other ordinary page target.
+`browser_exec` accepts Python using Browser Harness helpers. Browser state and workspace persist across calls, but Python variables do not. During one invocation the runtime keeps an in-memory set of the current target, explicitly created targets, target changes, and recursive `openerId` descendants. After success or exception it closes only that invocation-owned set; unrelated concurrent-session and manual tabs are untouched.
 
 Configured extensions are accepted only after browser-level read-back confirms exact ID, version, enabled state, and path. Package/config presence alone is not activation evidence.
 
@@ -83,7 +83,7 @@ Configured extensions are accepted only after browser-level read-back confirms e
 
 ## Linux-only lifecycle
 
-Linux uses Xvfb → Openbox → Chrome under systemd. `browser_exec` holds a shared activity lock so idle shutdown cannot stop Chrome during a task. Temporary Remote Access uses the same display/profile through loopback-only X11VNC, noVNC, and Caddy defaults. It must restore Chrome/CDP before returning a share URL; an empty display is not a successful recovery.
+Linux uses Xvfb → Openbox → Chrome under systemd. `browser_exec` holds a shared activity lock so idle shutdown cannot stop Chrome during a task. Managed Chrome shuts down after 60 minutes without Browser Harness or Remote Access activity by default. Temporary Remote Access uses the same display/profile through loopback-only X11VNC, noVNC, and Caddy defaults. It must restore Chrome/CDP before returning a share URL; an empty display is not a successful recovery.
 
 Remote Access requires deployment-specific credentials and external ingress configuration. Credentials, TLS private keys, egress routes, proxy settings, central AUTH deployment, and public listeners are not included in this repository.
 

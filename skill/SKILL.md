@@ -37,6 +37,8 @@ When the user assigns a clearer purpose to an existing profile, update only its 
 
 After profile creation, warn once that only one managed profile may be active and tasks requiring different profiles must not overlap. Different managed profiles cannot run simultaneously; same-profile tasks may run concurrently in separate `browser_exec` session/tab namespaces.
 
+Each `browser_exec` keeps invocation-owned target IDs only in process memory and closes only its current/created/switched targets plus recursive `openerId` descendants on success or exception. It must never perform global page cleanup or close another concurrent session's targets. If the process is killed before cleanup, leftover pages are harmless and expire with the managed Chrome idle shutdown.
+
 ## Scheduling warning
 
 When the user creates a scheduled task that names a managed profile, include one warning in the final response after creating it: only one managed profile can be active at a time, so scheduled tasks using different profiles must not overlap. Same-profile browser tasks may overlap in separate `browser_exec` session/tab namespaces. If the scheduled task does not name a managed profile, do not add browser-specific warnings or speculate about its implementation.

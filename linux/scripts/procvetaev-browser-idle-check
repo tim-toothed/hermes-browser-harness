@@ -5,7 +5,7 @@ RUNTIME_DIR=/run/procvetaev-browser
 STAMP="$RUNTIME_DIR/last-activity"
 LOCK="$RUNTIME_DIR/activity.lock"
 ENV_FILE=/etc/procvetaev-browser/.env
-BROWSER_IDLE_SECONDS=7200
+BROWSER_IDLE_SECONDS=3600
 
 if [[ -r "$ENV_FILE" ]]; then
   # shellcheck disable=SC1091

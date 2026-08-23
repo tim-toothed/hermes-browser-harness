@@ -12,7 +12,7 @@
 | Managed profiles | Persistent registry; одновременно active только один profile; switch заменяет Chrome process | Registry/skill есть; одновременно active только один profile | Parity contract, platform lifecycle разный |
 | Same-profile concurrency | PASS: реальные cron-задачи одновременно работали в отдельных session/tab namespaces | NOT RUN | Выполнить B2 на Windows; не предполагать очередь или конфликт заранее |
 | Different-profile concurrency | Не поддерживается: один endpoint и один active profile | Не поддерживается: один endpoint и один active profile | Оставить A8 warning; не ставить задачи разных profiles с пересечением |
-| Popup/tab ownership | Runtime namespaces и dedicated tabs | Runtime namespaces и dedicated tabs | B3 должен проверяться на каждой платформе |
+| Popup/tab ownership | Invocation-local in-memory target set; current/created/switched targets plus recursive `openerId` descendants | Same runtime contract | B3 checks owned cleanup without touching concurrent/manual targets |
 | Discovery/page routing | `web_search` для discovery; официальный URL/DOM — `browser_exec`; granular browser tools отсутствуют | Checklist требует то же, но public plugin toolset boundary отстаёт | Перенести Linux toolset fix в Windows/public plugin |
 | Computer Use | Не устанавливается; disabled для CLI/Telegram на target | Disabled на принятых Windows-нодах | Parity policy |
 

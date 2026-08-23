@@ -27,39 +27,85 @@ from .admin import (
     stop_remote_daemon,
     sync_local_profile,
 )
-from . import auth, recorder, telemetry
+from . import auth, helpers as _helpers, recorder, telemetry
 from .helpers import *
 
 
-def _close_other_page_targets():
-    """Keep the current page target and close every other page target."""
-    try:
-        current = current_tab()
-        keep_id = current.get("targetId") or current.get("target_id")
-        if not keep_id:
-            return
-        targets = cdp("Target.getTargets").get("targetInfos", [])
-        if not any(
-            target.get("type") == "page" and target.get("targetId") == keep_id
-            for target in targets
-        ):
-            return
-        for target in targets:
-            target_id = target.get("targetId")
-            if target.get("type") == "page" and target_id and target_id != keep_id:
-                cdp("Target.closeTarget", targetId=target_id)
+class _TargetTracker:
+    """Track page targets used or spawned by one Browser Harness program."""
 
-        deadline = time.monotonic() + 2
-        while time.monotonic() < deadline:
-            remaining = cdp("Target.getTargets").get("targetInfos", [])
-            if all(
-                target.get("type") != "page" or target.get("targetId") == keep_id
-                for target in remaining
-            ):
+    def __init__(self):
+        self.owned = set()
+
+    @staticmethod
+    def _target_id(target):
+        if not isinstance(target, dict):
+            return None
+        return target.get("targetId") or target.get("target_id")
+
+    def _remember_current(self):
+        try:
+            target_id = self._target_id(_helpers.current_tab())
+            if target_id:
+                self.owned.add(target_id)
+        except Exception:
+            pass
+
+    def start(self):
+        self._remember_current()
+
+    def observe(self, name, args, result):
+        if name == "cdp" and args and args[0] == "Target.createTarget":
+            target_id = self._target_id(result)
+            if target_id:
+                self.owned.add(target_id)
+        self._remember_current()
+
+    def _page_targets(self):
+        return {
+            target.get("targetId"): target
+            for target in _helpers.cdp("Target.getTargets").get("targetInfos", [])
+            if target.get("type") == "page" and target.get("targetId")
+        }
+
+    def _include_descendants(self, targets):
+        changed = True
+        while changed:
+            changed = False
+            for target_id, target in targets.items():
+                if target_id not in self.owned and target.get("openerId") in self.owned:
+                    self.owned.add(target_id)
+                    changed = True
+
+    def close_owned(self):
+        try:
+            self._remember_current()
+            targets = self._page_targets()
+            self._include_descendants(targets)
+            close_ids = [target_id for target_id in self.owned if target_id in targets]
+            if not close_ids:
                 return
-            time.sleep(0.02)
-    except Exception:
-        return
+
+            # Closing Chrome's final page can terminate the managed browser. Leave a
+            # neutral replacement only when this invocation owns every remaining page.
+            if not (set(targets) - set(close_ids)):
+                replacement = _helpers.cdp("Target.createTarget", url="about:blank")
+                replacement_id = self._target_id(replacement)
+                if replacement_id:
+                    targets[replacement_id] = {"targetId": replacement_id, "type": "page"}
+
+            current_id = self._target_id(_helpers.current_tab())
+            close_ids.sort(key=lambda target_id: target_id == current_id)
+            for target_id in close_ids:
+                try:
+                    _helpers.cdp("Target.closeTarget", targetId=target_id)
+                except Exception:
+                    pass
+        except Exception:
+            return
+
+
+_target_tracker = None
 
 
 HELP = """Browser Harness
@@ -191,6 +237,12 @@ def _traced(name, fn):
         step_start = time.monotonic()
         try:
             result = fn(*args, **kwargs)
+            tracker = _target_tracker
+            if tracker is not None:
+                try:
+                    tracker.observe(name, args, result)
+                except Exception:
+                    pass
         except BaseException as exc:
             entry["duration_seconds"] = round(time.monotonic() - step_start, 3)
             entry["error"] = str(exc)[:300]
@@ -420,11 +472,18 @@ def _run(args):
             # Setup/permission errors are instructions for calling agent
             print(f"browser-harness: {e}", file=sys.stderr)
             sys.exit(1)
+    global _target_tracker
+    tracker = _TargetTracker()
+    tracker.start()
+    _target_tracker = tracker
     _install_helper_trace()
     try:
         exec(code, globals())
     finally:
-        _close_other_page_targets()
+        try:
+            tracker.close_owned()
+        finally:
+            _target_tracker = None
 
 
 if __name__ == "__main__":

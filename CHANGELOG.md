@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.10 - 2026-08-23
+
+- Replace global post-exec page cleanup with invocation-owned target cleanup: track the current target, explicit target creation, target changes, and recursive `openerId` descendants in process memory; never close unrelated concurrent-session tabs.
+- Preserve one neutral page only when an invocation owns every remaining page, so cleanup cannot terminate managed Chrome.
+- Reduce the default Linux managed-Chrome idle shutdown from 120 to 60 minutes.
+
 ## 1.4.9 - 2026-08-23
 
 - Restore post-exec page cleanup: preserve the current ordinary page and close every other ordinary page target after success or exception.
