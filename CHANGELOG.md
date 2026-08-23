@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.9 - 2026-08-23
+
+- Restore post-exec page cleanup: preserve the current ordinary page and close every other ordinary page target after success or exception.
+- Clarify that temporary Remote Access routes are session leases, not persistent Leaf Node registrations, and require independent health evidence before reporting a lost node.
+
 ## 1.4.8
 
 - Linux installer now fails before mutation when legacy Chrome units, target symlinks, or multiple running profile roots would violate the single-instance contract.

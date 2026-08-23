@@ -30,6 +30,38 @@ from .admin import (
 from . import auth, recorder, telemetry
 from .helpers import *
 
+
+def _close_other_page_targets():
+    """Keep the current page target and close every other page target."""
+    try:
+        current = current_tab()
+        keep_id = current.get("targetId") or current.get("target_id")
+        if not keep_id:
+            return
+        targets = cdp("Target.getTargets").get("targetInfos", [])
+        if not any(
+            target.get("type") == "page" and target.get("targetId") == keep_id
+            for target in targets
+        ):
+            return
+        for target in targets:
+            target_id = target.get("targetId")
+            if target.get("type") == "page" and target_id and target_id != keep_id:
+                cdp("Target.closeTarget", targetId=target_id)
+
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            remaining = cdp("Target.getTargets").get("targetInfos", [])
+            if all(
+                target.get("type") != "page" or target.get("targetId") == keep_id
+                for target in remaining
+            ):
+                return
+            time.sleep(0.02)
+    except Exception:
+        return
+
+
 HELP = """Browser Harness
 
 Read SKILL.md for the default workflow and examples.
@@ -389,7 +421,10 @@ def _run(args):
             print(f"browser-harness: {e}", file=sys.stderr)
             sys.exit(1)
     _install_helper_trace()
-    exec(code, globals())
+    try:
+        exec(code, globals())
+    finally:
+        _close_other_page_targets()
 
 
 if __name__ == "__main__":

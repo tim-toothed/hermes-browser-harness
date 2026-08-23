@@ -49,6 +49,20 @@ When a CAPTCHA is visible, preserve the same page and target, wait 80 seconds wi
 
 ## Temporary Remote Access
 
+Temporary Remote Access registers a short-lived **session route**, not a persistent Leaf Node, device enrollment or node certificate. The central AUTH registry contains only currently open share leases. An empty registry, `410 session unavailable`, stopped share listener, or a node missing from an active-session view does not by itself mean that the VPS, Browser Harness or node authorization was lost.
+
+Describe only the temporary share URL/session route as unavailable. Never say that the Leaf Node itself became unavailable, disconnected or lost unless independent node health checks actually fail.
+
+Before reporting a lost node or an AUTH durability incident:
+
+1. Read the node-local share record and distinguish `open`, `revoked` and `expired`.
+2. Compare `created_at`, `expires_at` and the configured TTL with the observation time.
+3. Check whether the share was explicitly revoked or replaced; either action removes only that session route.
+4. Prove any claimed central AUTH restart from container/service `StartedAt`, restart count and logs. Never infer a restart from a missing route.
+5. Report a registration fault only when a still-open, unexpired local share should be registered but the same public route is unavailable without a matching revoke, expiry or verified restart.
+
+Persistence for a permanent node inventory would be a separate control-plane feature. Do not propose durable storage for temporary leases merely because no active share is listed.
+
 Create access only when the user explicitly requests to see/control the browser or human authorization is required:
 
 ```bash

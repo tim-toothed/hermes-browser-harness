@@ -2,7 +2,7 @@
 
 Cross-platform Hermes Agent plugin with a bundled, version-locked Browser Harness runtime and a production Linux host package.
 
-- Plugin: **1.4.8**
+- Plugin: **1.4.9**
 - Browser Harness runtime: **0.1.9**
 - Model-facing tool: plugin-owned `browser_exec` in the dedicated `browser_harness` toolset
 - Browser transport: one managed Chrome through loopback CDP
@@ -69,7 +69,7 @@ Hermes model
   → one managed Chrome
 ```
 
-`browser_exec` accepts Python using Browser Harness helpers. Browser state and workspace persist across calls, but Python variables do not.
+`browser_exec` accepts Python using Browser Harness helpers. Browser state and workspace persist across calls, but Python variables do not. After each script, including an exception path, the runtime preserves the current ordinary page and closes every other ordinary page target.
 
 Configured extensions are accepted only after browser-level read-back confirms exact ID, version, enabled state, and path. Package/config presence alone is not activation evidence.
 
