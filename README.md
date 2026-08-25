@@ -1,8 +1,8 @@
 # Hermes Browser Harness
 
-Cross-platform Hermes Agent plugin with a bundled, version-locked Browser Harness runtime and a production Linux host package.
+Cross-platform Hermes Agent plugin with a bundled, version-locked Browser Harness runtime and managed Chrome host packages for Windows and Linux.
 
-- Plugin: **1.4.9**
+- Plugin: **1.4.11**
 - Browser Harness runtime: **0.1.9**
 - Model-facing tool: plugin-owned `browser_exec` in the dedicated `browser_harness` toolset
 - Browser transport: one managed Chrome through loopback CDP
@@ -24,6 +24,33 @@ hermes tools disable browser --platform cli
 ```
 
 The same boundary must be applied to Telegram or another active platform. Do not expose the granular built-in browser tools beside `browser_exec`.
+
+## Windows host installation
+
+The Windows package uses normal Google Chrome with one agent-owned persistent profile and loopback CDP at `127.0.0.1:9222`. It does not install Linux lifecycle dependencies, Remote Access, a watchdog, Hermes core patches, a separate Browser Harness `uv tool`, or a global tab limit.
+
+Install and enable the plugin first, then run the host installer from the installed checkout:
+
+```powershell
+hermes plugins install tim-toothed/hermes-browser-harness --force
+hermes plugins enable browser-harness --allow-tool-override
+cd "$env:LOCALAPPDATA\hermes\plugins\browser-harness"
+& "$env:LOCALAPPDATA\hermes\hermes-agent\venv\Scripts\python.exe" .\install-windows.py
+```
+
+`v1.4.11` is the first release containing the Windows host installer. The earlier `v1.4.10` tag remains unchanged.
+
+The installer:
+
+- preserves the existing `%LOCALAPPDATA%\hermes\Hermes Automation` profile, its active Chrome subprofile such as `Profile 2`, and the managed-profile registry;
+- configures Chrome and uBlock Origin Lite `2026.812.1211` through Hermes config;
+- creates an interactive, Limited, `IgnoreNew` logon task for managed Chrome;
+- enables `browser_harness` and disables built-in `browser` and `computer_use` for CLI and Telegram;
+- removes the obsolete `browser.backend`, `BU_NAME`/`BU_CDP_URL` user variables, and exact legacy `browser-harness 0.1.9` uv-tool install;
+- restores inherited ACLs on the plugin, extension, and installed skill trees so the Limited interactive Gateway/Chrome token can read them;
+- supports idempotent update installation and `--check-only` preflight.
+
+Restart Hermes through the node's supported interactive Gateway path after installation. Acceptance requires a real Hermes `browser_exec` page operation; config, process, package, or CDP checks alone are insufficient.
 
 ## Linux host installation
 
@@ -118,13 +145,13 @@ See [`docs/PLATFORM_PARITY.md`](docs/PLATFORM_PARITY.md) for the complete Linux 
 
 Release changes are recorded in [`CHANGELOG.md`](CHANGELOG.md).
 
-The main remaining Windows parity work is to deploy and verify the `1.4.6` dedicated-toolset boundary and run the same-profile concurrency test there. Historical Windows installers are not the source for new installations.
+Windows runtime `1.4.10` was update-installed and real-Hermes accepted on the D2 pilot. Release `1.4.11` adds the reviewed Windows migration installer; fleet rollout remains a separate operator-approved step. Historical Windows installers are not the source for new installations.
 
 ## Development
 
 ```bash
 python -m unittest discover -s tests -p 'test_*.py' -v
-python -m py_compile __init__.py tool.py tests/test_plugin.py tests/test_linux_runtime.py \
+python -m py_compile __init__.py tool.py install-windows.py tests/test_plugin.py tests/test_linux_runtime.py \
   linux/scripts/install-browser-extensions linux/scripts/browser-install-state
 bash -n install-linux.sh uninstall-linux.sh \
   linux/scripts/browser-chrome-launch linux/scripts/browser-profile \
@@ -142,4 +169,4 @@ The bundled Browser Harness runtime remains MIT licensed by Browser Use; see `ru
 
 ## License
 
-The plugin adapter and Linux orchestration are MIT licensed by Timur Sharifullin / PROCVETAEV. Third-party components retain their own licenses.
+The plugin adapter plus Windows and Linux orchestration are MIT licensed by Timur Sharifullin / PROCVETAEV. Third-party components retain their own licenses.

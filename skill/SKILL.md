@@ -10,6 +10,9 @@ Use the `browser_exec` tool for navigation, interaction, screenshots and CDP. Do
 ## Browser work
 
 - First navigation: `new_tab(url)`.
+- For one user task, choose one short stable `browser_exec` `session` name on the first call and reuse exactly that name for every related call. Never create a new session for each probe, retry, page, scroll, report, download or extraction step. A distinct session is only for genuinely concurrent same-profile work, never for structuring sequential reasoning; every unique session creates a persistent daemon.
+- Keep the loaded page in that session and combine related inspection or extraction into as few calls as practical. Do not call `new_tab()` again when the task page already exists.
+- Use `wait_for_load()` or targeted DOM/network conditions. Do not add fixed `time.sleep()` delays or polling loops unless a documented site-specific flow, such as the CAPTCHA rule below, requires elapsed time.
 - Use accessibility/CDP inspection first; use screenshots when visual state matters.
 - Stop at login, password, MFA or consent unless the user explicitly handles it.
 

@@ -1,19 +1,19 @@
-# Linux 1.4.5 ↔ Windows Browser Harness parity inventory
+# Linux 1.4.10 ↔ Windows 1.4.11 Browser Harness parity inventory
 
-Дата фиксации: 2026-08-21. Источники: принятый Linux pilot, historical Windows acceptance и фактический source обоих пакетов.
+Дата фиксации: 2026-08-24. Источники: принятый Linux pilot, Windows D2 pilot и фактический source обоих пакетов.
 
 ## Общий контракт
 
-| Контракт | Linux 1.4.5 | Windows current | Действие |
+| Контракт | Linux 1.4.10 | Windows 1.4.11 | Действие |
 |---|---|---|---|
-| Model-facing browser surface | Только plugin-owned `browser_exec` в toolset `browser_harness`; built-in `browser` отключён | Desktop deployment требует upgrade/read-back; public source `1.4.5` теперь содержит dedicated toolset fix | Развернуть `1.4.5` на Windows и повторить B4/B6 |
+| Model-facing browser surface | Только plugin-owned `browser_exec` в toolset `browser_harness`; built-in `browser` отключён | D2 read-back: только plugin-owned `browser_exec` в `browser_harness`; built-in `browser` и `computer_use` отключены для CLI/Telegram | Parity |
 | Browser runtime | Bundled Browser Harness `0.1.9` | Bundled Browser Harness `0.1.9` | Parity |
 | CDP owner | Один Chrome на loopback `127.0.0.1:9222` | Один managed Chrome на loopback `127.0.0.1:9222` | Parity |
 | Managed profiles | Persistent registry; одновременно active только один profile; switch заменяет Chrome process | Registry/skill есть; одновременно active только один profile | Parity contract, platform lifecycle разный |
-| Same-profile concurrency | PASS: реальные cron-задачи одновременно работали в отдельных session/tab namespaces | NOT RUN | Выполнить B2 на Windows; не предполагать очередь или конфликт заранее |
+| Same-profile concurrency | PASS: реальные cron-задачи одновременно работали в отдельных session/tab namespaces | PASS: два одновременных real Hermes chat в Session 1; короткая owned-вкладка очистилась, пока длинная оставалась активной | Parity |
 | Different-profile concurrency | Не поддерживается: один endpoint и один active profile | Не поддерживается: один endpoint и один active profile | Оставить A8 warning; не ставить задачи разных profiles с пересечением |
 | Popup/tab ownership | Invocation-local in-memory target set; current/created/switched targets plus recursive `openerId` descendants | Same runtime contract | B3 checks owned cleanup without touching concurrent/manual targets |
-| Discovery/page routing | `web_search` для discovery; официальный URL/DOM — `browser_exec`; granular browser tools отсутствуют | Checklist требует то же, но public plugin toolset boundary отстаёт | Перенести Linux toolset fix в Windows/public plugin |
+| Discovery/page routing | `web_search` для discovery; официальный URL/DOM — `browser_exec`; granular browser tools отсутствуют | Toolset boundary совпадает; отдельный B6 discovery scenario в Windows pilot не запускался | Не объявлять Windows B6 PASS без отдельного trace |
 | Computer Use | Не устанавливается; disabled для CLI/Telegram на target | Disabled на принятых Windows-нодах | Parity policy |
 
 ## Общие исправления, выявленные Linux pilot
@@ -43,23 +43,24 @@
 
 ## Windows-specific behavior/debt
 
-- Windows cold-start запускает Chrome непосредственно как detached process, без systemd/X11/Remote Access stack.
+- Windows cold-start запускает Chrome через интерактивную Limited/IgnoreNew logon task или plugin-owned detached process в пользовательской Session 1, без systemd/X11/Remote Access stack.
 - Windows Preferences/download path используют Windows filesystem semantics.
-- Historical public standalone plugin `1.3.1` регистрировал `browser_exec` в toolset `browser`. Public source `1.4.6` исправлен; Windows deployment и real-agent read-back ещё не выполнены.
-- B2 same-profile concurrent cron behavior на Windows не проверен.
+- D2 обновлён с pinned plugin `1.3.0` и отдельного `browser-harness 0.1.9` uv tool на внешний runtime `1.4.10`; профиль и registry сохранены. Windows installer выпускается как plugin `1.4.11`.
+- Windows installer восстанавливает inherited ACL для plugin, extension и skill trees после SSH/elevated install; без этого Limited Chrome/Gateway не читает manifest/plugin.
+- B2 same-profile concurrent real-agent behavior и B3 exception cleanup на D2 подтверждены browser target read-back.
 - Historical Windows NopeCHA state не переносится в Linux package. Linux package управляет только uBlock; CAPTCHA extension/configuration отложены.
-- Старые Windows installer artifacts не являются источником для новых установок; новый Windows lifecycle должен адаптировать принятый Linux process по этапам.
+- Старые Windows installer artifacts не являются источником для новых установок; source of truth — `install-windows.py` и `windows/skill/` в plugin.
 
 ## Acceptance B1–B6 после ревизии
 
 | Test | Назначение | Linux | Windows |
 |---|---|---|---|
 | B1 | Последовательное переключение разных profiles | PASS | Historical PASS |
-| B2 | Одновременные задачи одного profile, отдельные session/tab namespaces | PASS | NOT RUN |
-| B3 | Popup принадлежит создающей операции и не ломает другие sessions | Требует отдельного сохранённого evidence при следующем regression | Требует rerun при Windows release |
-| B4 | Известный URL идёт через внешний plugin-owned `browser_exec` | PASS | Historical PASS; повторить после dedicated-toolset port |
+| B2 | Одновременные задачи одного profile, отдельные session/tab namespaces | PASS | PASS на D2: два real Hermes chat, mid-run и final CDP target read-back |
+| B3 | Popup принадлежит создающей операции и не ломает другие sessions | Требует отдельного сохранённого evidence при следующем regression | PASS на D2: intentional exception закрыл owned target и сохранил внешний target |
+| B4 | Известный URL идёт через внешний plugin-owned `browser_exec` | PASS | PASS на D2: `example.com`, real Hermes tool trace, exact acceptance marker |
 | B5 | Обычный поиск не вызывает browser plugin | SKIP до принятого `web_search + web_extract` contract | SKIP по той же причине |
-| B6 | Discovery и page interaction разделены | PASS | Повторить после dedicated-toolset port |
+| B6 | Discovery и page interaction разделены | PASS | NOT RUN в D2 pilot |
 
 ## Явно не включено в release
 

@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.4.11 - 2026-08-24
+
+- Add the Windows host installer for managed Chrome, persistent profile/registry preservation, pinned uBlock Origin Lite, interactive logon task, and dedicated `browser_harness` toolset configuration.
+- Remove the legacy Windows `browser.backend`, user-level Browser Harness environment variables, separate `browser-harness 0.1.9` uv-tool runtime, Hermes core patches, and global tab-limit dependency.
+- Restore inherited ACLs on Windows plugin, extension, and skill trees so Limited interactive Gateway and Chrome processes can read SSH/elevated installations.
+- Verify extension config semantically after Hermes normalizes JSON input to YAML read-back.
+- Preserve the active Chrome subprofile such as `Profile 2`, create the Task Scheduler folder before registration, and retire only a verified legacy Chrome task.
+- Reconcile every pinned extension payload byte, fail closed on legacy/config command errors, and verify inherited ACLs recursively.
+- Start managed Chrome minimized on Windows for logon, plugin cold-start, and model-directed profile-switch paths.
+- Scope persistent Browser Harness daemons to Hermes `task_id`, preventing model-generated per-step session labels from creating unbounded daemon processes; document session reuse and condition-based waits for sequential browser work.
+
+Distribution ref: `v1.4.11`. The existing `v1.4.10` tag remains immutable at the previously published Linux-ready source commit.
+
 ## 1.4.10 - 2026-08-23
 
 - Replace global post-exec page cleanup with invocation-owned target cleanup: track the current target, explicit target creation, target changes, and recursive `openerId` descendants in process memory; never close unrelated concurrent-session tabs.

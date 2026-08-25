@@ -273,6 +273,7 @@ def _ensure_browser(env: dict, timeout_s: float = 15.0) -> Optional[str]:
         "--disable-background-mode",
         "--no-first-run",
         "--no-default-browser-check",
+        "--start-minimized",
         "--new-window",
         "about:blank",
     ]
@@ -591,9 +592,14 @@ def handle_browser_exec(args: dict, **kwargs):
         timeout = _DEFAULT_TIMEOUT_S
 
     env = _base_env()
-    env["BU_NAME"] = _runtime_name(session or _configured_name(), cdp_url)
+    task_id = str(kwargs.get("task_id") or "").strip()
+    # Hermes task_id is stable across all tool calls in one agent run. Use it as
+    # the daemon namespace so model-generated per-step session labels cannot
+    # spawn an unbounded set of persistent Browser Harness daemons. Explicit
+    # session remains the fallback for standalone/direct handler invocations.
+    env["BU_NAME"] = _runtime_name(task_id or session or _configured_name(), cdp_url)
     env["BU_CDP_URL"] = cdp_url
-    workspace = _workspace_dir(kwargs.get("task_id"))
+    workspace = _workspace_dir(task_id)
     if workspace:
         env["BH_AGENT_WORKSPACE"] = workspace
 

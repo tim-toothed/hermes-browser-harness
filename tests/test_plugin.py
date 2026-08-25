@@ -144,13 +144,18 @@ class BrowserHarnessPluginTests(unittest.TestCase):
         ), patch.object(tool, "_runtime_command", return_value=command), patch.object(
             tool, "_workspace_dir", return_value=tmp
         ), patch.object(tool.subprocess, "run", side_effect=fake_run):
-            result = json.loads(tool.handle_browser_exec({"code": 'print("ok")', "timeout_s": 30}, task_id="task-1"))
+            result = json.loads(
+                tool.handle_browser_exec(
+                    {"code": 'print("ok")', "session": "model-step-label", "timeout_s": 30},
+                    task_id="task-1",
+                )
+            )
 
         self.assertTrue(result["success"])
         self.assertEqual(captured["cmd"], command)
         self.assertEqual(captured["input"], 'print("ok")')
         self.assertEqual(captured["env"]["BU_CDP_URL"], "http://127.0.0.1:9222")
-        self.assertEqual(captured["env"]["BU_NAME"], tool._runtime_name("agent", "http://127.0.0.1:9222"))
+        self.assertEqual(captured["env"]["BU_NAME"], tool._runtime_name("task-1", "http://127.0.0.1:9222"))
         self.assertEqual(captured["env"]["BH_AGENT_WORKSPACE"], tmp)
         self.assertEqual(captured["cwd"], str(tool._RUNTIME_DIR))
 

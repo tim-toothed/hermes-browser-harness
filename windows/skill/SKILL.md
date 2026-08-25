@@ -1,7 +1,7 @@
 ---
 name: browser-harness
 description: Use managed Google Chrome through the Browser Harness plugin on Windows.
-version: 1.4.10
+version: 1.4.11
 author: Timur Sharifullin (tim_toothed), Hermes Agent
 license: MIT
 platforms: [windows]
@@ -36,10 +36,11 @@ Rules:
    - `--remote-debugging-address=127.0.0.1`
    - `--remote-debugging-port=9222`
    - its registered `--user-data-dir`
-   - `--profile-directory=Default`
+   - configured `--profile-directory` for that managed profile root
    - `--disable-background-mode`
    - `--no-first-run`
    - `--no-default-browser-check`
+   - `--start-minimized`
 6. Never terminate unrelated `chrome.exe` processes.
 7. Create or change profiles only on an explicit user request. Preserve existing registry entries and change `default` only when explicitly requested.
 8. Write the registry atomically with Python JSON parsing and `os.replace`; never edit it with string replacement.
@@ -72,12 +73,11 @@ If a CAPTCHA or bot challenge appears, stop the active page program and let the 
 
 A Windows installation is accepted only when all of the following are proven:
 
-1. Plugin version is `1.4.10` and bundled Browser Harness runtime is `0.1.9`.
+1. Plugin version is `1.4.11` and bundled Browser Harness runtime is `0.1.9`.
 2. Toolset `browser_harness` is enabled; built-in `browser` and `computer_use` are disabled for CLI and Telegram.
 3. Chrome listens only on loopback `127.0.0.1:9222` with the selected registry `user_data_dir`.
 4. The pinned extension is loaded from the configured agent-owned path with the expected id/version.
 5. `browser_exec` completes a real page operation through Hermes.
-6. Existing managed profile data survives an update install.
-7. An authenticated business-service scenario succeeds without exposing session data.
+6. Existing managed profile data and its configured Chrome subprofile survive an update install.
 
 Run acceptance sequentially and stop at the first failure. Fix that cause before continuing dependent scenarios.
