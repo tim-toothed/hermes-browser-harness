@@ -599,6 +599,9 @@ def handle_browser_exec(args: dict, **kwargs):
     # session remains the fallback for standalone/direct handler invocations.
     env["BU_NAME"] = _runtime_name(task_id or session or _configured_name(), cdp_url)
     env["BU_CDP_URL"] = cdp_url
+    # One Hermes task reuses its daemon and browser target across related calls.
+    # Standalone Browser Harness keeps its default post-exec cleanup behavior.
+    env["BH_PERSIST_TARGETS"] = "1"
     workspace = _workspace_dir(task_id)
     if workspace:
         env["BH_AGENT_WORKSPACE"] = workspace

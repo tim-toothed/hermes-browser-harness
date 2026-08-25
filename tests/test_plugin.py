@@ -156,8 +156,15 @@ class BrowserHarnessPluginTests(unittest.TestCase):
         self.assertEqual(captured["input"], 'print("ok")')
         self.assertEqual(captured["env"]["BU_CDP_URL"], "http://127.0.0.1:9222")
         self.assertEqual(captured["env"]["BU_NAME"], tool._runtime_name("task-1", "http://127.0.0.1:9222"))
+        self.assertEqual(captured["env"]["BH_PERSIST_TARGETS"], "1")
         self.assertEqual(captured["env"]["BH_AGENT_WORKSPACE"], tmp)
         self.assertEqual(captured["cwd"], str(tool._RUNTIME_DIR))
+
+    def test_plugin_runtime_preserves_task_targets_across_calls(self):
+        source = (PLUGIN_DIR / "runtime/src/browser_harness/run.py").read_text(encoding="utf-8")
+        self.assertIn('def _persist_targets():', source)
+        self.assertIn('os.environ.get("BH_PERSIST_TARGETS") == "1"', source)
+        self.assertIn('if not _persist_targets():\n                tracker.close_owned()', source)
 
     def test_non_loopback_cdp_is_rejected(self):
         load_plugin_module()

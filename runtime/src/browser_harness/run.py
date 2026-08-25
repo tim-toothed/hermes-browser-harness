@@ -171,6 +171,11 @@ def _explicit_cdp_configured():
     return bool(os.environ.get("BU_CDP_URL") or os.environ.get("BU_CDP_WS"))
 
 
+def _persist_targets():
+    """Whether the embedding caller owns target lifecycle across CLI calls."""
+    return os.environ.get("BH_PERSIST_TARGETS") == "1"
+
+
 def _cloud_auth_configured():
     try:
         auth.get_browser_use_api_key()
@@ -481,7 +486,8 @@ def _run(args):
         exec(code, globals())
     finally:
         try:
-            tracker.close_owned()
+            if not _persist_targets():
+                tracker.close_owned()
         finally:
             _target_tracker = None
 
