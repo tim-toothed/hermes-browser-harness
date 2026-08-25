@@ -39,9 +39,12 @@ _DESCRIPTION = (
     "0.1.9 runtime and its loopback CDP endpoint. The code argument is Python "
     "executed with Browser Harness pre-imported helpers; print every value needed "
     "in the result. Browser state and workspace persist across calls, but Python "
-    "variables do not. Inspect page_info() first and reuse the current target; use "
-    "goto_url(url) when that target needs navigation and new_tab(url) only when an "
-    "additional concurrent tab is required. Other helpers include wait_for_load(), "
+    "variables do not. Inspect and reuse a meaningful current target, but when the "
+    "task-owned target is about:blank and the destination URL is known, combine "
+    "goto_url(url), wait_for_load(), and targeted extraction in the first call. "
+    "Combine related navigation, interaction, and extraction in one call; split calls "
+    "only when returned page state determines the next action. Use new_tab(url) only "
+    "when an additional concurrent tab is required. Other helpers include "
     "js(expr), fill_input(), capture_screenshot(), and cdp('Domain.method', **kwargs). "
     "Default-profile cold startup is automatic; managed profile selection follows "
     "the browser policy."
@@ -516,6 +519,77 @@ def _runtime_name(name: str, cdp_url: str) -> str:
     endpoint = cdp_url.rstrip("/").lower().encode("utf-8")
     suffix = hashlib.sha256(endpoint).hexdigest()[:10]
     return f"{name[:53]}-{suffix}"
+
+
+def _task_daemon_endpoint(env: dict[str, str], name: str) -> Path:
+    runtime = Path(env["BH_RUNTIME_DIR"])
+    suffix = ".port" if os.name == "nt" else ".sock"
+    return runtime / f"bu-{name}{suffix}"
+
+
+def _task_daemon_request(endpoint: Path, payload: dict[str, Any], timeout_s: float = 2.0) -> dict:
+    token = None
+    if os.name == "nt":
+        state = json.loads(endpoint.read_text(encoding="utf-8"))
+        connection = socket.create_connection(("127.0.0.1", int(state["port"])), timeout=timeout_s)
+        token = state.get("token")
+    else:
+        connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        connection.settimeout(timeout_s)
+        connection.connect(str(endpoint))
+    try:
+        request = dict(payload)
+        if token:
+            request["token"] = token
+        connection.sendall((json.dumps(request) + "\n").encode("utf-8"))
+        data = b""
+        while not data.endswith(b"\n"):
+            chunk = connection.recv(1 << 16)
+            if not chunk:
+                break
+            data += chunk
+        response = json.loads(data or b"{}")
+        return response if isinstance(response, dict) else {}
+    finally:
+        connection.close()
+
+
+def stop_task_daemon(task_id: str) -> bool:
+    """Stop the Browser Harness daemon owned by one completed Hermes task."""
+    task_id = str(task_id or "").strip()
+    if not task_id:
+        return False
+    cdp_url = _configured_cdp_url()
+    name = _runtime_name(task_id, cdp_url)
+    env = _base_env()
+    endpoint = _task_daemon_endpoint(env, name)
+    if not endpoint.exists():
+        return False
+
+    try:
+        identity = _task_daemon_request(endpoint, {"meta": "ping"})
+        pid = identity.get("pid")
+        if identity.get("pong") is not True or type(pid) is not int or not 0 < pid < (1 << 31):
+            logger.warning("Browser Harness task daemon identity check failed for %s", name)
+            return False
+        response = _task_daemon_request(endpoint, {"meta": "shutdown"})
+        if response.get("ok") is not True:
+            logger.warning("Browser Harness task daemon rejected shutdown for %s", name)
+            return False
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline:
+            if not endpoint.exists():
+                return True
+            try:
+                os.kill(pid, 0)
+            except (ProcessLookupError, OSError, SystemError, OverflowError):
+                return True
+            time.sleep(0.05)
+        logger.warning("Browser Harness task daemon %s did not exit within 3s", name)
+        return False
+    except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+        logger.warning("Browser Harness task daemon cleanup failed for %s: %s", name, exc)
+        return False
 
 
 def _workspace_dir(task_id: Optional[str]) -> Optional[str]:

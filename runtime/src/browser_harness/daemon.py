@@ -359,6 +359,7 @@ class Daemon:
         self.session = None
         self.target_id = None
         self.dedicated_target_id = None
+        self.owned_target_ids = set()
         self._dedicated_target_lock = asyncio.Lock()
         self._session_state_lock = asyncio.Lock()
         self._session_replacements = {}
@@ -395,6 +396,7 @@ class Daemon:
                             "Target.createTarget", {"url": "about:blank", "background": True}
                         ))["targetId"]
                         self.dedicated_target_id = tid
+                        self.owned_target_ids.add(tid)
                         log(f"named daemon {NAME}: created dedicated tab ({tid})")
                         page = {"targetId": tid, "url": "about:blank", "type": "page"}
             tid = page["targetId"]
@@ -629,7 +631,12 @@ class Daemon:
         # For everything else, explicit session in req wins; else default.
         sid = None if method.startswith("Target.") else (req.get("session_id") or self.session)
         try:
-            return {"result": await self.cdp.send_raw(method, params, session_id=sid)}
+            result = await self.cdp.send_raw(method, params, session_id=sid)
+            if method == "Target.createTarget" and result.get("targetId"):
+                self.owned_target_ids.add(result["targetId"])
+            elif method == "Target.closeTarget" and params.get("targetId"):
+                self.owned_target_ids.discard(params["targetId"])
+            return {"result": result}
         except Exception as e:
             msg = str(e)
             if "Session with given id not found" in msg and sid:
@@ -662,6 +669,31 @@ class Daemon:
                         return {"error": str(retry_error)}
             return {"error": msg}
 
+    async def close_owned_targets(self):
+        """Close only tabs created by this named task daemon and their popups."""
+        if NAME == "default" or REMOTE_ID or not self.owned_target_ids:
+            return
+        owned = set(self.owned_target_ids)
+        try:
+            infos = (await self.cdp.send_raw("Target.getTargets"))["targetInfos"]
+            changed = True
+            while changed:
+                changed = False
+                for info in infos:
+                    tid = info.get("targetId")
+                    if tid not in owned and info.get("openerId") in owned:
+                        owned.add(tid)
+                        changed = True
+        except Exception as e:
+            log(f"owned-target discovery failed: {e}")
+        for tid in owned:
+            try:
+                await self.cdp.send_raw("Target.closeTarget", {"targetId": tid})
+                log(f"closed task-owned target {tid}")
+            except Exception as e:
+                log(f"owned-target close failed ({tid}): {e}")
+        self.owned_target_ids.clear()
+
 
 async def serve(d):
     async def handler(reader, writer):
@@ -693,6 +725,7 @@ async def serve(d):
             t.cancel()
             try: await t
             except (asyncio.CancelledError, Exception): pass
+        await d.close_owned_targets()
         ipc.cleanup_endpoint(NAME)
 
 

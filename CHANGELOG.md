@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.14
+
+- Stop each task-owned Browser Harness daemon through the Hermes `on_session_end` lifecycle hook after completed, failed, or interrupted parent/child tasks.
+- Keep all `browser_exec` calls within one task on the same daemon and leave concurrent task isolation unchanged.
+- Close each named task daemon's dedicated tab and any task-created tabs/popups during shutdown without touching targets owned by parallel tasks.
+
 ## 1.4.13 - 2026-08-25
 
 - Register plugin-owned `browser_exec` in Hermes' canonical `browser` toolset.

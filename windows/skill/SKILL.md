@@ -73,7 +73,7 @@ If a CAPTCHA or bot challenge appears, stop the active page program and let the 
 
 A Windows installation is accepted only when all of the following are proven:
 
-1. Plugin version is `1.4.13` and bundled Browser Harness runtime is `0.1.9`.
+1. Plugin version is `1.4.14` and bundled Browser Harness runtime is `0.1.9`.
 2. Canonical toolset `browser` is enabled and exposes plugin-owned `browser_exec` without granular built-in browser actions; `computer_use` is disabled for CLI and Telegram.
 3. Chrome listens only on loopback `127.0.0.1:9222` with the selected registry `user_data_dir`.
 4. The pinned extension is loaded from the configured agent-owned path with the expected id/version.

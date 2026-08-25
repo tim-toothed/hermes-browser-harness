@@ -1,6 +1,11 @@
 """External Browser Harness tool plugin for Hermes Agent."""
 
-from .tool import BROWSER_EXEC_SCHEMA, handle_browser_exec, is_available
+import logging
+
+from .tool import BROWSER_EXEC_SCHEMA, handle_browser_exec, is_available, stop_task_daemon
+
+
+logger = logging.getLogger(__name__)
 
 
 _SUPPRESSED_BUILTIN_BROWSER_TOOLS = (
@@ -45,6 +50,14 @@ def _handle_browser_exec(args: dict, **kwargs):
     return handle_browser_exec(args, **kwargs)
 
 
+def _on_session_end(**kwargs) -> None:
+    """Release only the daemon belonging to the completed parent/child task."""
+    try:
+        stop_task_daemon(str(kwargs.get("task_id") or ""))
+    except Exception:
+        logger.warning("Browser Harness task cleanup hook failed", exc_info=True)
+
+
 def register(ctx) -> None:
     """Make Browser Harness the exclusive implementation of Hermes browser."""
     for name in _SUPPRESSED_BUILTIN_BROWSER_TOOLS:
@@ -67,3 +80,4 @@ def register(ctx) -> None:
         emoji="🌐",
         override=True,
     )
+    ctx.register_hook("on_session_end", _on_session_end)
