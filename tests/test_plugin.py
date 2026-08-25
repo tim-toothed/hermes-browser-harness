@@ -34,6 +34,18 @@ class FakeContext:
 
 
 class BrowserHarnessPluginTests(unittest.TestCase):
+    def test_schema_teaches_task_owned_target_reuse(self):
+        module = load_plugin_module()
+        description = module.BROWSER_EXEC_SCHEMA["description"]
+        session_description = module.BROWSER_EXEC_SCHEMA["parameters"]["properties"]["session"]["description"]
+
+        self.assertIn("Inspect page_info() first", description)
+        self.assertIn("reuse the current target", description)
+        self.assertIn("new_tab(url) only", description)
+        self.assertNotIn("new_tab(url) for first navigation", description)
+        self.assertIn("Hermes task_id owns daemon isolation", session_description)
+        self.assertNotIn("daemon namespace", session_description)
+
     def tearDown(self):
         for name in list(sys.modules):
             if name == "browser_harness_plugin" or name.startswith("browser_harness_plugin."):

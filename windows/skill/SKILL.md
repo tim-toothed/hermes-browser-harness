@@ -1,7 +1,7 @@
 ---
 name: browser-harness
 description: Use managed Google Chrome through the Browser Harness plugin on Windows.
-version: 1.4.11
+version: 1.4.12
 author: Timur Sharifullin (tim_toothed), Hermes Agent
 license: MIT
 platforms: [windows]
@@ -13,7 +13,7 @@ metadata:
 
 # Browser Harness — Windows
 
-Use the plugin-provided `browser_exec` tool for browser work. The plugin owns the bundled Browser Harness runtime, default Chrome cold start, extension reconciliation, and per-invocation tab cleanup. Do not run a separate Browser Harness `uv tool`, patch Hermes core, or reintroduce a global tab limit.
+Use the plugin-provided `browser_exec` tool for browser work. The plugin owns the bundled Browser Harness runtime, default Chrome cold start, extension reconciliation, Hermes-task daemon isolation, and task-owned target persistence across calls. Do not run a separate Browser Harness `uv tool`, patch Hermes core, or reintroduce a global tab limit.
 
 ## Routing
 
@@ -29,9 +29,9 @@ The registry is `browser-profiles.json` beside this file. Select its `default` e
 Rules:
 
 1. Every `user_data_dir` must be an absolute path to a separate agent-owned directory. Never point at, copy, reset, inspect, or delete an employee's ordinary Chrome profile.
-2. Only one managed Chrome profile may own `127.0.0.1:9222` at a time. `BU_NAME` remains `agent`; Browser Harness sessions isolate daemon/tab namespaces, not Chrome profiles.
-3. Before a page operation, if port `9222` is already listening, verify the owning Chrome command line uses the selected registry entry's `user_data_dir`.
-4. If the default profile is selected and port `9222` is free, call `browser_exec`; plugin code owns cold startup using the configured executable, profile, and loopback CDP endpoint.
+2. Only one managed Chrome profile may own `127.0.0.1:9222` at a time. Hermes `task_id` owns daemon isolation and task targets; a model-provided session label does not select or isolate Chrome profiles.
+3. For the selected default profile, call `browser_exec` directly. Plugin code owns endpoint reuse and cold startup using the configured executable, profile, and loopback CDP endpoint; do not run a terminal profile-status preflight for every page operation.
+4. Use terminal owner/process verification only for an explicit non-default profile switch or when diagnosing a profile/endpoint mismatch.
 5. If another registered profile is active, close it through CDP, verify its exact process tree exited and port `9222` became free, then launch the selected registered profile with:
    - `--remote-debugging-address=127.0.0.1`
    - `--remote-debugging-port=9222`
@@ -50,7 +50,7 @@ When the user creates a scheduled browser task for a named profile, warn once th
 ## Page Workflow
 
 - Prefer `goto_url(url)` in the current page, then `wait_for_load()`. Use `new_tab(url)` only when multiple pages are needed inside one call.
-- Batch coherent navigation/read/action work into one bounded call. Python variables do not survive calls; workspace files and the browser session do.
+- Keep each call coherent and bounded. Python variables do not survive calls; workspace files and the task-owned browser target do, so continue in a later call when another reasoning step or tool result is needed.
 - Prefer the accessibility tree (`cdp("Accessibility.getFullAXTree")`) for semantic interaction; verify every state-changing action.
 - Use screenshots when layout, imagery, canvas, or animation matters.
 - Stop for passwords, MFA/OTP, payment, permission grants, or ambiguous account selection. Existing unambiguous SSO may be used.
@@ -73,7 +73,7 @@ If a CAPTCHA or bot challenge appears, stop the active page program and let the 
 
 A Windows installation is accepted only when all of the following are proven:
 
-1. Plugin version is `1.4.11` and bundled Browser Harness runtime is `0.1.9`.
+1. Plugin version is `1.4.12` and bundled Browser Harness runtime is `0.1.9`.
 2. Toolset `browser_harness` is enabled; built-in `browser` and `computer_use` are disabled for CLI and Telegram.
 3. Chrome listens only on loopback `127.0.0.1:9222` with the selected registry `user_data_dir`.
 4. The pinned extension is loaded from the configured agent-owned path with the expected id/version.

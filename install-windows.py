@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install the Windows host contract for PROCVETAEV Browser Harness 1.4.11.
+"""Install the Windows host contract for PROCVETAEV Browser Harness 1.4.12.
 
 Run this script from an already installed and enabled browser-harness plugin
 checkout. It configures one managed Chrome profile on loopback CDP, installs
@@ -28,7 +28,7 @@ import zipfile
 import xml.etree.ElementTree as ET
 from pathlib import Path, PureWindowsPath
 
-PLUGIN_VERSION = "1.4.11"
+PLUGIN_VERSION = "1.4.12"
 BROWSER_HARNESS_VERSION = "0.1.9"
 CDP_HOST = "127.0.0.1"
 DEFAULT_CDP_PORT = 9222

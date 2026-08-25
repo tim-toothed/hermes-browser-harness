@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.12 - 2026-08-25
+
+- Preserve task-owned browser targets across separate `browser_exec` calls.
+- Scope daemon ownership to Hermes `task_id` instead of model-generated session labels.
+- Align the model-facing tool schema with target reuse: inspect/reuse the current target, navigate it with `goto_url`, and reserve `new_tab` for an additional concurrent tab.
+
 ## 1.4.11 - 2026-08-24
 
 - Add the Windows host installer for managed Chrome, persistent profile/registry preservation, pinned uBlock Origin Lite, interactive logon task, and dedicated `browser_harness` toolset configuration.

@@ -39,10 +39,12 @@ _DESCRIPTION = (
     "0.1.9 runtime and its loopback CDP endpoint. The code argument is Python "
     "executed with Browser Harness pre-imported helpers; print every value needed "
     "in the result. Browser state and workspace persist across calls, but Python "
-    "variables do not. Use new_tab(url) for first navigation, goto_url(url) for "
-    "current-tab navigation, wait_for_load(), page_info(), js(expr), fill_input(), "
-    "capture_screenshot(), and cdp('Domain.method', **kwargs). Default-profile cold "
-    "startup is automatic; managed profile selection follows the browser policy."
+    "variables do not. Inspect page_info() first and reuse the current target; use "
+    "goto_url(url) when that target needs navigation and new_tab(url) only when an "
+    "additional concurrent tab is required. Other helpers include wait_for_load(), "
+    "js(expr), fill_input(), capture_screenshot(), and cdp('Domain.method', **kwargs). "
+    "Default-profile cold startup is automatic; managed profile selection follows "
+    "the browser policy."
 )
 
 BROWSER_EXEC_SCHEMA = {
@@ -57,7 +59,7 @@ BROWSER_EXEC_SCHEMA = {
             },
             "session": {
                 "type": "string",
-                "description": "Optional Browser Harness daemon namespace. Reuse it for related calls.",
+                "description": "Optional logical label for related calls. Hermes task_id owns daemon isolation and target persistence.",
             },
             "timeout_s": {
                 "type": "integer",
