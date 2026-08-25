@@ -21,8 +21,7 @@ CONFIG_KEYS = (
     "browser.harness.extensions",
 )
 TOOLSETS = {
-    "browser_harness": True,
-    "browser": False,
+    "browser": True,
     "computer_use": False,
 }
 PLATFORMS = ("cli", "telegram")

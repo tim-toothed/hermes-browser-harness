@@ -2,9 +2,9 @@
 
 Cross-platform Hermes Agent plugin with a bundled, version-locked Browser Harness runtime and managed Chrome host packages for Windows and Linux.
 
-- Plugin: **1.4.12**
+- Plugin: **1.4.13**
 - Browser Harness runtime: **0.1.9**
-- Model-facing tool: plugin-owned `browser_exec` in the dedicated `browser_harness` toolset
+- Model-facing tool: plugin-owned `browser_exec` in Hermes' canonical `browser` toolset
 - Browser transport: one managed Chrome through loopback CDP
 - Supported plugin hosts: Windows and Linux
 - Supported Linux installer target: Debian/Ubuntu amd64 VPS
@@ -16,11 +16,10 @@ hermes plugins install tim-toothed/hermes-browser-harness
 hermes plugins enable browser-harness --allow-tool-override
 ```
 
-Enable `browser_harness` and disable the built-in `browser` toolset on every platform used by the agent. Restart the active Hermes process after installation.
+Enable the canonical `browser` toolset on every platform used by the agent. The plugin overrides `browser_exec` and suppresses granular built-in browser actions. Restart the active Hermes process after installation.
 
 ```bash
-hermes tools enable browser_harness --platform cli
-hermes tools disable browser --platform cli
+hermes tools enable browser --platform cli
 ```
 
 The same boundary must be applied to Telegram or another active platform. Do not expose the granular built-in browser tools beside `browser_exec`.
@@ -45,7 +44,7 @@ The installer:
 - preserves the existing `%LOCALAPPDATA%\hermes\Hermes Automation` profile, its active Chrome subprofile such as `Profile 2`, and the managed-profile registry;
 - configures Chrome and uBlock Origin Lite `2026.812.1211` through Hermes config;
 - creates an interactive, Limited, `IgnoreNew` logon task for managed Chrome;
-- enables `browser_harness` and disables built-in `browser` and `computer_use` for CLI and Telegram;
+- enables canonical `browser`, suppresses its granular built-in actions through the plugin, and disables `computer_use` for CLI and Telegram;
 - removes the obsolete `browser.backend`, `BU_NAME`/`BU_CDP_URL` user variables, and exact legacy `browser-harness 0.1.9` uv-tool install;
 - restores inherited ACLs on the plugin, extension, and installed skill trees so the Limited interactive Gateway/Chrome token can read them;
 - supports idempotent update installation and `--check-only` preflight.
@@ -70,7 +69,7 @@ The installer:
 - creates a dedicated service account and persistent profile storage;
 - starts Chrome on demand through systemd and waits for loopback CDP readiness;
 - installs a persistent managed-profile registry and selector;
-- enables `browser_harness`, disables built-in `browser`, and disables `computer_use` for CLI and Telegram;
+- enables canonical `browser`, suppresses its granular built-in actions through the plugin, and disables `computer_use` for CLI and Telegram;
 - installs pinned uBlock Origin Lite `2026.812.1211` as a managed unpacked extension;
 - preserves profile data, registry, node-local Chrome arguments, credentials, and share state during update;
 - moves an unowned pre-existing `browser-harness` skill to a timestamped backup instead of deleting it;
@@ -88,7 +87,7 @@ Persistent profiles and node credentials are not removed automatically.
 
 ```text
 Hermes model
-  → browser_harness toolset
+  → canonical browser toolset
   → plugin-owned browser_exec
   → managed Chrome readiness / extension reconciliation
   → bundled Browser Harness 0.1.9

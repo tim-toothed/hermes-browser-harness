@@ -6,7 +6,7 @@
 
 | Контракт | Linux 1.4.10 | Windows 1.4.11 | Действие |
 |---|---|---|---|
-| Model-facing browser surface | Только plugin-owned `browser_exec` в toolset `browser_harness`; built-in `browser` отключён | D2 read-back: только plugin-owned `browser_exec` в `browser_harness`; built-in `browser` и `computer_use` отключены для CLI/Telegram | Parity |
+| Model-facing browser surface | Plugin-owned `browser_exec` в canonical toolset `browser`; granular built-ins подавлены plugin overrides | Только plugin-owned `browser_exec` в `browser`; `computer_use` отключён для CLI/Telegram | Parity |
 | Browser runtime | Bundled Browser Harness `0.1.9` | Bundled Browser Harness `0.1.9` | Parity |
 | CDP owner | Один Chrome на loopback `127.0.0.1:9222` | Один managed Chrome на loopback `127.0.0.1:9222` | Parity |
 | Managed profiles | Persistent registry; одновременно active только один profile; switch заменяет Chrome process | Registry/skill есть; одновременно active только один profile | Parity contract, platform lifecycle разный |
@@ -18,7 +18,7 @@
 
 ## Общие исправления, выявленные Linux pilot
 
-1. **Dedicated toolset.** `browser_exec` вынесен из built-in `browser` в `browser_harness`; built-in granular browser tools отключаются. Это общий fix, а не Linux-specific behavior.
+1. **Canonical toolset.** Plugin переопределяет `browser_exec` внутри штатного `browser`, а granular built-ins делает недоступными name-scoped overrides. Это устраняет unknown-toolset drift без возврата competing browser routes.
 2. **Live extension reconciliation.** Config/payload недостаточны: required contract — `config → browser-level getExtensions → loadUnpacked if missing → exact read-back → browser DSL`.
 3. **Extension acceptance.** Проверяются exact ID, version, path и `enabled=true`; функциональность uBlock подтверждается A/B effect, а не только listing.
 4. **Chrome recovery.** Active lifecycle container/target сам по себе не доказывает живой Chrome. Перед Browser Harness или Remote Access требуется CDP readiness.

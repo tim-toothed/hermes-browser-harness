@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.13 - 2026-08-25
+
+- Register plugin-owned `browser_exec` in Hermes' canonical `browser` toolset.
+- Suppress granular built-in browser actions through unavailable name-scoped overrides so `browser` exposes Browser Harness without legacy page-action routes.
+- Remove the custom `browser_harness` boundary that CLI and cron could validate before plugin discovery and report as unknown.
+
 ## 1.4.12 - 2026-08-25
 
 - Preserve task-owned browser targets across separate `browser_exec` calls.

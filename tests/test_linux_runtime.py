@@ -153,8 +153,7 @@ class InstallStateTests(unittest.TestCase):
                 "previous_config": {},
                 "installed_config": {},
                 "previous_toolsets": {"cli": {
-                    "browser_harness": False,
-                    "browser": True,
+                    "browser": False,
                     "computer_use": True,
                 }},
                 "installed_toolsets": {"cli": dict(self.state.TOOLSETS)},
@@ -165,8 +164,7 @@ class InstallStateTests(unittest.TestCase):
                 self.state.restore(state_file)
             commands = [call.args[0] for call in run.call_args_list]
             self.assertEqual(commands, [
-                ["hermes", "tools", "disable", "browser_harness", "--platform", "cli"],
-                ["hermes", "tools", "enable", "browser", "--platform", "cli"],
+                ["hermes", "tools", "disable", "browser", "--platform", "cli"],
                 ["hermes", "tools", "enable", "computer_use", "--platform", "cli"],
             ])
 

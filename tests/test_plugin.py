@@ -107,14 +107,19 @@ class BrowserHarnessPluginTests(unittest.TestCase):
             (target / "manifest.json").write_text('{"version":"changed"}', encoding="utf-8")
             self.assertFalse(module.extracted_payload_matches(payload))
 
-    def test_registers_existing_browser_exec_in_exclusive_plugin_toolset(self):
+    def test_registers_exclusive_browser_surface_in_canonical_toolset(self):
         plugin = load_plugin_module()
         ctx = FakeContext()
         plugin.register(ctx)
-        self.assertEqual(len(ctx.calls), 1)
-        call = ctx.calls[0]
+        self.assertEqual(len(ctx.calls), len(plugin._SUPPRESSED_BUILTIN_BROWSER_TOOLS) + 1)
+        suppressed = ctx.calls[:-1]
+        self.assertEqual({call["name"] for call in suppressed}, set(plugin._SUPPRESSED_BUILTIN_BROWSER_TOOLS))
+        self.assertTrue(all(call["toolset"] == "browser" for call in suppressed))
+        self.assertTrue(all(call["override"] is True for call in suppressed))
+        self.assertTrue(all(call["check_fn"]() is False for call in suppressed))
+        call = ctx.calls[-1]
         self.assertEqual(call["name"], "browser_exec")
-        self.assertEqual(call["toolset"], "browser_harness")
+        self.assertEqual(call["toolset"], "browser")
         self.assertIs(call["override"], True)
         self.assertEqual(call["handler"].__module__, plugin.__name__)
         self.assertEqual(set(call["schema"]["parameters"]["properties"]), {"code", "session", "timeout_s"})

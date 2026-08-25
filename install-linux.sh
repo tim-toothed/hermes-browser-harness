@@ -283,20 +283,15 @@ hermes config set --force browser.harness.profile_directory Default
 hermes tools disable computer_use --platform cli >/dev/null
 hermes tools disable computer_use --platform telegram >/dev/null
 for platform in cli telegram; do
-  hermes tools enable browser_harness --platform "$platform" >/dev/null
-  hermes tools disable browser --platform "$platform" >/dev/null
+  hermes tools enable browser --platform "$platform" >/dev/null
   hermes tools list --platform "$platform" \
     | grep -i 'computer_use' \
     | grep -qi 'disabled' \
     || { echo "computer_use remains enabled for $platform" >&2; exit 1; }
   hermes tools list --platform "$platform" \
-    | grep -i 'browser_harness' \
-    | grep -qi 'enabled' \
-    || { echo "browser_harness remains disabled for $platform" >&2; exit 1; }
-  hermes tools list --platform "$platform" \
     | grep -E '(^|[[:space:]])browser([[:space:]]|$)' \
-    | grep -qi 'disabled' \
-    || { echo "built-in browser remains enabled for $platform" >&2; exit 1; }
+    | grep -qi 'enabled' \
+    || { echo "canonical browser remains disabled for $platform" >&2; exit 1; }
 done
 
 trap - EXIT

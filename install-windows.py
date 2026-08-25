@@ -427,11 +427,10 @@ def configure_hermes(
     if backend is not _MISSING and backend != "":
         raise RuntimeError("Hermes resolved browser.backend is not absent or empty.")
     for platform in ("cli", "telegram"):
-        run([hermes, "tools", "enable", "browser_harness", "--platform", platform])
-        run([hermes, "tools", "disable", "browser", "--platform", platform])
+        run([hermes, "tools", "enable", "browser", "--platform", platform])
         run([hermes, "tools", "disable", "computer_use", "--platform", platform])
         listing = " ".join(run([hermes, "tools", "list", "--platform", platform]).stdout.casefold().split())
-        for expected in ("enabled browser_harness", "disabled browser", "disabled computer_use"):
+        for expected in ("enabled browser", "disabled computer_use"):
             if expected not in listing:
                 raise RuntimeError(f"Hermes toolset read-back failed on {platform}: missing {expected!r}")
 
