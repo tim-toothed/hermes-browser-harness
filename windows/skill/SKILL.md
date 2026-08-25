@@ -1,8 +1,8 @@
 ---
 name: browser-harness
 description: Use managed Google Chrome through the Browser Harness plugin on Windows.
-version: 1.4.12
-author: Timur Sharifullin (tim_toothed), Hermes Agent
+version: 1.4.15
+author: tim-toothed
 license: MIT
 platforms: [windows]
 metadata:
@@ -49,8 +49,12 @@ When the user creates a scheduled browser task for a named profile, warn once th
 
 ## Page Workflow
 
-- Prefer `goto_url(url)` in the current page, then `wait_for_load()`. Use `new_tab(url)` only when multiple pages are needed inside one call.
-- Keep each call coherent and bounded. Python variables do not survive calls; workspace files and the task-owned browser target do, so continue in a later call when another reasoning step or tool result is needed.
+- An ordinary browser task should normally take 1–3 `browser_exec` calls. Combine target selection, navigation, interaction, targeted waits, and extraction in one call whenever the next step does not depend on unseen output.
+- Each task receives an isolated `about:blank` target. When the destination URL is known, call `goto_url(url)`, `wait_for_load()` or a targeted `wait_for_element()`, and extract the needed result in the first call. Managed-profile cookies already apply; do not enumerate old tabs merely to reuse authentication.
+- Use `list_tabs()` and `switch_tab(id)` only when the task explicitly requires state from an already-open tab. Available helpers are documented in the `browser_exec` schema; never spend a call inspecting `globals()`, help, or helper availability.
+- Do not use fixed `wait()` or `time.sleep()` delays. Do not reload, scroll, or capture screenshots unless observed page state makes that action necessary.
+- Python variables do not survive calls; workspace files and the task-owned browser target do. Continue in a later call only when returned page state genuinely determines the next action.
+- Use `new_tab(url)` only when multiple concurrent pages are required inside one task.
 - Prefer the accessibility tree (`cdp("Accessibility.getFullAXTree")`) for semantic interaction; verify every state-changing action.
 - Use screenshots when layout, imagery, canvas, or animation matters.
 - Stop for passwords, MFA/OTP, payment, permission grants, or ambiguous account selection. Existing unambiguous SSO may be used.
@@ -73,7 +77,7 @@ If a CAPTCHA or bot challenge appears, stop the active page program and let the 
 
 A Windows installation is accepted only when all of the following are proven:
 
-1. Plugin version is `1.4.14` and bundled Browser Harness runtime is `0.1.9`.
+1. Plugin version is `1.4.15` and bundled Browser Harness runtime is `0.1.9`.
 2. Canonical toolset `browser` is enabled and exposes plugin-owned `browser_exec` without granular built-in browser actions; `computer_use` is disabled for CLI and Telegram.
 3. Chrome listens only on loopback `127.0.0.1:9222` with the selected registry `user_data_dir`.
 4. The pinned extension is loaded from the configured agent-owned path with the expected id/version.

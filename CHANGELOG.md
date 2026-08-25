@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.15
+
+- Teach the model-facing `browser_exec` contract to finish ordinary browser tasks in 1–3 coherent calls instead of separate target/helper discovery steps.
+- List the supported target, navigation, interaction, wait, and extraction helpers directly in the tool schema.
+- Prefer immediate navigation in the task-owned tab, targeted waits, and observed-state actions; prohibit fixed sleeps and unnecessary reload/scroll/screenshot work.
+
 ## 1.4.14
 
 - Stop each task-owned Browser Harness daemon through the Hermes `on_session_end` lifecycle hook after completed, failed, or interrupted parent/child tasks.

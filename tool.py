@@ -32,20 +32,26 @@ _IMAGE_PATH_RE = re.compile(
     r"((?:[A-Za-z]:[\\/]|/)[^\s\"']+?\.(?:png|jpe?g|webp))", re.IGNORECASE
 )
 _RUNTIME_DIR = Path(__file__).resolve().parent / "runtime"
-_STATE_VERSION = "plugin-1.4.5-runtime-0.1.9"
+_STATE_VERSION = "plugin-1.4.15-runtime-0.1.9"
 
 _DESCRIPTION = (
     "Drive configured managed Google Chrome through the bundled Browser Harness "
     "0.1.9 runtime and its loopback CDP endpoint. The code argument is Python "
     "executed with Browser Harness pre-imported helpers; print every value needed "
-    "in the result. Browser state and workspace persist across calls, but Python "
-    "variables do not. Inspect and reuse a meaningful current target, but when the "
-    "task-owned target is about:blank and the destination URL is known, combine "
-    "goto_url(url), wait_for_load(), and targeted extraction in the first call. "
-    "Combine related navigation, interaction, and extraction in one call; split calls "
-    "only when returned page state determines the next action. Use new_tab(url) only "
-    "when an additional concurrent tab is required. Other helpers include "
-    "js(expr), fill_input(), capture_screenshot(), and cdp('Domain.method', **kwargs). "
+    "in the result. Aim for 1-3 calls for an ordinary task: combine target selection, "
+    "navigation, interaction, waits, and extraction, and split only when returned page "
+    "state determines the next action. Each task starts on an isolated about:blank tab. "
+    "When the destination URL is known, use goto_url(url), wait_for_load() or a targeted "
+    "wait_for_element(), and extraction in the first call; the managed profile cookies "
+    "already apply, so do not enumerate old tabs merely to reuse authentication. Use "
+    "list_tabs() and switch_tab(id) only when the task specifically needs state from an "
+    "already-open tab. Helpers are already available: page_info, current_tab, list_tabs, "
+    "switch_tab, goto_url, new_tab, wait_for_load, wait_for_element, wait_for_network_idle, "
+    "js, cdp, click_at_xy, scroll, fill_input, type_text, press_key, and capture_screenshot. "
+    "Never spend a call inspecting globals/help. Do not use fixed wait()/time.sleep() delays; "
+    "do not reload, scroll, or screenshot unless required by observed page state. Browser "
+    "state and workspace persist across calls, but Python variables do not. Use new_tab(url) "
+    "only when an additional concurrent tab is required. "
     "Default-profile cold startup is automatic; managed profile selection follows "
     "the browser policy."
 )
@@ -58,7 +64,7 @@ BROWSER_EXEC_SCHEMA = {
         "properties": {
             "code": {
                 "type": "string",
-                "description": "Python using Browser Harness pre-imported helpers. Use print(...) for returned data.",
+                "description": "Python using the pre-imported helpers listed above. Combine related steps, avoid fixed sleeps, and print all returned data.",
             },
             "session": {
                 "type": "string",

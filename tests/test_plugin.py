@@ -28,9 +28,13 @@ def load_plugin_module(name="browser_harness_plugin"):
 class FakeContext:
     def __init__(self):
         self.calls = []
+        self.hooks = []
 
     def register_tool(self, **kwargs):
         self.calls.append(kwargs)
+
+    def register_hook(self, name, handler):
+        self.hooks.append((name, handler))
 
 
 class BrowserHarnessPluginTests(unittest.TestCase):
@@ -39,8 +43,11 @@ class BrowserHarnessPluginTests(unittest.TestCase):
         description = module.BROWSER_EXEC_SCHEMA["description"]
         session_description = module.BROWSER_EXEC_SCHEMA["parameters"]["properties"]["session"]["description"]
 
-        self.assertIn("Inspect page_info() first", description)
-        self.assertIn("reuse the current target", description)
+        self.assertIn("Aim for 1-3 calls", description)
+        self.assertIn("Each task starts on an isolated about:blank tab", description)
+        self.assertIn("do not enumerate old tabs merely to reuse authentication", description)
+        self.assertIn("Never spend a call inspecting globals/help", description)
+        self.assertIn("Do not use fixed wait()/time.sleep() delays", description)
         self.assertIn("new_tab(url) only", description)
         self.assertNotIn("new_tab(url) for first navigation", description)
         self.assertIn("Hermes task_id owns daemon isolation", session_description)
@@ -123,6 +130,7 @@ class BrowserHarnessPluginTests(unittest.TestCase):
         self.assertIs(call["override"], True)
         self.assertEqual(call["handler"].__module__, plugin.__name__)
         self.assertEqual(set(call["schema"]["parameters"]["properties"]), {"code", "session", "timeout_s"})
+        self.assertEqual(ctx.hooks, [("on_session_end", plugin._on_session_end)])
 
     def test_runtime_is_bundled_and_locked_at_019(self):
         runtime = PLUGIN_DIR / "runtime"
