@@ -584,11 +584,10 @@ def stop_task_daemon(task_id: str) -> bool:
             return False
         deadline = time.monotonic() + 3.0
         while time.monotonic() < deadline:
+            # The daemon removes its endpoint only after close_owned_targets().
+            # Do not use os.kill(pid, 0) here: on Windows signal 0 calls
+            # TerminateProcess and races the daemon's owned-target cleanup.
             if not endpoint.exists():
-                return True
-            try:
-                os.kill(pid, 0)
-            except (ProcessLookupError, OSError, SystemError, OverflowError):
                 return True
             time.sleep(0.05)
         logger.warning("Browser Harness task daemon %s did not exit within 3s", name)
