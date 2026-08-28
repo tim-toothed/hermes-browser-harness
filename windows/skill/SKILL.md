@@ -1,7 +1,7 @@
 ---
 name: browser-harness
 description: Use managed Google Chrome through the Browser Harness plugin on Windows.
-version: 1.4.15
+version: 1.4.16
 author: tim-toothed
 license: MIT
 platforms: [windows]

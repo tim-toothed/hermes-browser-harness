@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.16
+
+- Fix the Windows host installer version gate shipped in `v1.4.15`: the installer now accepts and reports the same plugin version as `plugin.yaml` instead of incorrectly requiring `1.4.12`.
+- Keep the published `v1.4.15` tag immutable; use `v1.4.16` for corrected Windows installations.
+
 ## 1.4.15
 
 - Teach the model-facing `browser_exec` contract to finish ordinary browser tasks in 1–3 coherent calls instead of separate target/helper discovery steps.
