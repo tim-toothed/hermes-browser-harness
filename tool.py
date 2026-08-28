@@ -276,6 +276,37 @@ def _ensure_browser(env: dict, timeout_s: float = 15.0) -> Optional[str]:
     except (OSError, RuntimeError) as exc:
         return f"Failed to configure managed Chrome profile: {exc}"
 
+    if os.name == "nt":
+        schtasks = shutil.which("schtasks.exe") or shutil.which("schtasks")
+        task_name = r"\PROCVETAEV\Browser Harness Chrome"
+        if schtasks:
+            query = subprocess.run(
+                [schtasks, "/Query", "/TN", task_name],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            if query.returncode == 0:
+                started = subprocess.run(
+                    [schtasks, "/Run", "/TN", task_name],
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                )
+                if started.returncode != 0:
+                    details = (started.stderr or started.stdout or "schtasks /Run failed").strip()
+                    return f"Failed to start managed Chrome task: {details[:1000]}"
+                deadline = time.monotonic() + max(1.0, timeout_s)
+                while time.monotonic() < deadline:
+                    if _cdp_ready(cdp_url) is None:
+                        return None
+                    time.sleep(0.2)
+                return (
+                    "Managed Chrome task did not expose Browser Harness CDP at "
+                    f"{cdp_url} within {timeout_s:g}s."
+                )
+
     command = [
         str(executable),
         f"--remote-debugging-port={parsed.port}",
