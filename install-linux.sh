@@ -218,6 +218,12 @@ fi
 if [[ -f "$chrome_args_file" ]]; then
   chown root:"$SERVICE_USER" "$chrome_args_file"
   chmod 0640 "$chrome_args_file"
+  # External PAC/proxy writers may replace the inode with mkstemp's root:root 0600.
+  # Verify the actual Chrome service identity can read the persistent arguments.
+  runuser -u "$SERVICE_USER" -- test -r "$chrome_args_file" || {
+    echo "Chrome service cannot read $chrome_args_file; expected root:$SERVICE_USER 0640" >&2
+    exit 1
+  }
 fi
 
 for unit in procvetaev-browser-share.service procvetaev-x11vnc.service procvetaev-novnc.service; do

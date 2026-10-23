@@ -83,6 +83,22 @@ sudo ./uninstall-linux.sh
 
 Persistent profiles and node credentials are not removed automatically.
 
+### Preserve Linux Chrome argument permissions
+
+`/var/lib/procvetaev-browser/chrome-args.json` must remain `root:procvetaev-browser` with mode `0640`. Chrome runs as `procvetaev-browser`, not root. The installer sets these permissions and verifies readability as that service user. PAC/proxy helpers that atomically replace this file must set the temporary file's owner/group and mode **before** `os.replace`; `mkstemp` defaults (`root:root`, `0600`) break Chrome startup even though the JSON is valid. Preserve existing flags and profile paths.
+
+If Harness times out waiting for CDP and the share broker reports `browser target creation failed`, inspect `journalctl -u procvetaev-chrome` first. For `Permission denied` on this exact file, repair metadata only:
+
+```bash
+sudo chown root:procvetaev-browser /var/lib/procvetaev-browser/chrome-args.json
+sudo chmod 0640 /var/lib/procvetaev-browser/chrome-args.json
+sudo -u procvetaev-browser test -r /var/lib/procvetaev-browser/chrome-args.json
+sudo systemctl restart procvetaev-chrome
+hermes chat -q 'Use Browser Harness to open https://example.com/ and report the title and visible text.'
+```
+
+Use a normal chat for acceptance. If intentionally restricting tools with `-t`, current Hermes requires `-t browser,terminal`: its schema permission gate omits `browser_exec` when `terminal` is unavailable. This does not require the agent to call terminal to browse. Do not reinstall Chrome, reset profiles, or change AUTH/broker credentials to repair file permissions.
+
 ## Runtime contract
 
 ```text
