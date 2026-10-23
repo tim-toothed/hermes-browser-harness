@@ -555,7 +555,12 @@ def _hermes_home() -> Path:
 def _runtime_name(name: str, cdp_url: str) -> str:
     endpoint = cdp_url.rstrip("/").lower().encode("utf-8")
     suffix = hashlib.sha256(endpoint).hexdigest()[:10]
-    return f"{name[:53]}-{suffix}"
+    # Preserve existing safe names; hash the full identity when normalization is needed.
+    if re.fullmatch(r"[A-Za-z0-9._-]{1,53}", name):
+        return f"{name}-{suffix}"
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", name)[:40] or "task"
+    identity = hashlib.sha256((name + "\0" + cdp_url.rstrip("/").lower()).encode("utf-8")).hexdigest()[:20]
+    return f"{safe}-{identity}"
 
 
 def _task_daemon_endpoint(env: dict[str, str], name: str) -> Path:
