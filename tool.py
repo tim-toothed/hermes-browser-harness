@@ -32,7 +32,7 @@ _IMAGE_PATH_RE = re.compile(
     r"((?:[A-Za-z]:[\\/]|/)[^\s\"']+?\.(?:png|jpe?g|webp))", re.IGNORECASE
 )
 _RUNTIME_DIR = Path(__file__).resolve().parent / "runtime"
-_STATE_VERSION = "plugin-1.4.15-runtime-0.1.9"
+_STATE_VERSION = "plugin-1.4.17-runtime-0.1.9"
 
 _DESCRIPTION = (
     "Drive configured managed Google Chrome through the bundled Browser Harness "

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.4.17
+
+- Fix Windows task startup/cleanup races and normalize scheduled task runtime names.
+- Verify Linux service-account readability of persistent Chrome arguments.
+- Remove the bundled default ad blocker and extension archive; preserve user-managed extension configuration.
+- Retire central Remote Access registration/revocation calls; retain node-local OTP, TTL, cookie authorization and owned-target cleanup.
+- Align shipped browser policies with task-owned targets and the current tool schema.
+- Source-release evidence: exact exported candidate registration through the Hermes loader and isolated Linux broker HTTP/Chromium CDP smoke. This is not deployed Caddy HTTPS/WSS, systemd, or production installation acceptance.
+
 ## 1.4.16
 
 - Fix the Windows host installer version gate shipped in `v1.4.15`: the installer now accepts and reports the same plugin version as `plugin.yaml` instead of incorrectly requiring `1.4.12`.
