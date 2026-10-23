@@ -72,9 +72,9 @@ class InstallStateTests(unittest.TestCase):
         self.state.delete_nested(data, "browser.harness.executable")
         self.assertEqual(data, {"browser": {"harness": {"other": 1}}})
 
-    def test_packaged_defaults_do_not_embed_private_auth_endpoint(self):
+    def test_packaged_defaults_require_explicit_public_base(self):
         env_example = (ROOT / "linux" / "config" / "share.env.example").read_text(encoding="utf-8")
-        self.assertIn("SHARE_AUTH_BASE_URL=\n", env_example)
+        self.assertIn("SHARE_PUBLIC_BASE_URL=\n", env_example)
         self.assertIn("BROWSER_SHARE_BIND=127.0.0.1", env_example)
         self.assertIn("SHARE_MAX_TTL_SECONDS=1800", env_example)
         self.assertNotIn("auth.procvetaev.space", env_example)
@@ -108,7 +108,7 @@ class InstallStateTests(unittest.TestCase):
         self.assertIn("https://vps-broker.local:{$BROWSER_SHARE_PORT:8791}", caddy)
         self.assertIn("bind {$BROWSER_SHARE_BIND:127.0.0.1}", caddy)
 
-    def test_broker_waits_for_listener_socket_before_auth_registration(self):
+    def test_broker_waits_for_listener_socket_before_returning_share(self):
         broker = (SHARE / "broker.py").read_text(encoding="utf-8")
         self.assertIn('socket.create_connection(("127.0.0.1"', broker)
         self.assertIn("browser share listener did not become ready", broker)

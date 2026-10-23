@@ -126,18 +126,18 @@ Configured extensions are accepted only after browser-level read-back confirms e
 
 Linux uses Xvfb → Openbox → Chrome under systemd. `browser_exec` holds a shared activity lock so idle shutdown cannot stop Chrome during a task. Managed Chrome shuts down after 60 minutes without Browser Harness or Remote Access activity by default. Temporary Remote Access uses the same display/profile through loopback-only X11VNC, noVNC, and Caddy defaults. It must restore Chrome/CDP before returning a share URL; an empty display is not a successful recovery.
 
-Remote Access requires deployment-specific credentials and external ingress configuration. Credentials, TLS private keys, egress routes, proxy settings, central AUTH deployment, and public listeners are not included in this repository.
+Remote Access requires deployment-specific credentials and external ingress configuration. Credentials, TLS private keys, egress routes, proxy settings, and public listeners are not included in this repository.
 
 Configure `/etc/procvetaev-browser/.env` explicitly before using Remote Access:
 
 ```dotenv
-SHARE_AUTH_BASE_URL=https://your-auth-gateway.example
+SHARE_PUBLIC_BASE_URL=https://your-browser-access.example:8791
 SHARE_MAX_TTL_SECONDS=1800
 BROWSER_SHARE_BIND=127.0.0.1
 BROWSER_SHARE_PORT=8791
 ```
 
-Keep the default loopback bind unless the central AUTH gateway connects directly to this VPS. For that deployment, set `BROWSER_SHARE_BIND=0.0.0.0` and restrict port `8791` to the trusted ingress path with the host/provider firewall. The central gateway must accept a route TTL of at least `1800` seconds. Any broader bind is an explicit deployment decision; it is never enabled by the package default.
+Keep the default loopback bind when a local HTTPS ingress proxies the listener. Direct VPS access requires deployment-owned DNS/TLS matching the public URL, an explicit listener bind, and host/provider firewall rules. Any broader bind is an explicit deployment decision; it is never enabled by the package default. `SHARE_PUBLIC_BASE_URL` is the client-facing HTTPS base, not a registration endpoint. Local OTP/cookie authorization remains required for HTTPS/WSS access.
 
 Creating Remote Access requires a concrete target and opens one owned Chrome tab:
 
@@ -147,7 +147,7 @@ curl -fsS -X POST http://127.0.0.1:8790/v1/shares \
   --data '{"kind":"remote_access","target_url":"https://target.example/","ttl_seconds":1800}'
 ```
 
-Revoke, expiry, and replacement close only that owned tab. Existing manual tabs and unrelated `browser_exec` tabs are preserved. The broker waits for the Caddy listener to become reachable before registering the temporary route with AUTH.
+Revoke, expiry, and replacement close only that owned tab. Existing manual tabs and unrelated `browser_exec` tabs are preserved. The broker waits for the Caddy listener to become reachable before returning the local share. Revoke returns HTTP `200` with `{"revoked": true}` when the local open lease is revoked; repeated revoke returns `false`.
 
 ## CAPTCHA boundary
 

@@ -13,11 +13,6 @@ https://vps-broker.local:{$BROWSER_SHARE_PORT:8791} {
         reverse_proxy 127.0.0.1:8790
     }
 
-    @registration_proof path /v1/public/registration-proof
-    handle @registration_proof {
-        reverse_proxy 127.0.0.1:8790
-    }
-
     @remote path_regexp share_remote ^/access/remote/([^/]+)(/.*)$
     handle @remote {
         forward_auth 127.0.0.1:8790 {

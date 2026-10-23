@@ -33,9 +33,7 @@ DB = os.getenv("SHARE_BROKER_DB", "/var/lib/procvetaev-browser-share/shares.sqli
 PEPPER_FILE = os.getenv("SHARE_BROKER_PEPPER_FILE", "/etc/procvetaev-browser/share.pepper")
 MAX_TTL = int(os.getenv("SHARE_MAX_TTL_SECONDS", "1800"))
 CDP_URL = os.getenv("BROWSER_CDP_URL", "http://127.0.0.1:9222").rstrip("/")
-AUTH_BASE_URL = os.getenv("SHARE_AUTH_BASE_URL", "").rstrip("/")
-REGISTRATION_URL = os.getenv("SHARE_REGISTRATION_URL", f"{AUTH_BASE_URL}/v1/share/register" if AUTH_BASE_URL else "")
-REVOCATION_URL = os.getenv("SHARE_REVOCATION_URL", f"{AUTH_BASE_URL}/v1/share/revoke" if AUTH_BASE_URL else "")
+PUBLIC_BASE = os.getenv("SHARE_PUBLIC_BASE_URL", "").rstrip("/")
 
 Path(DB).parent.mkdir(parents=True, exist_ok=True)
 pepper = Path(PEPPER_FILE).read_bytes().strip()
@@ -127,45 +125,6 @@ def close_owned_target(metadata: dict) -> None:
     close_browser_target(str(metadata.get("browser_target_id") or ""))
 
 
-def register_session(token: str, share_id: str, expires_at: float) -> None:
-    if not AUTH_BASE_URL.startswith("https://") or not REGISTRATION_URL.startswith("https://"):
-        raise RuntimeError("Remote Access requires an explicit HTTPS SHARE_AUTH_BASE_URL")
-    body = json.dumps({
-        "token": token,
-        "session_id": share_id,
-        "kind": ShareKind.REMOTE_ACCESS.value,
-        "expires_at": int(expires_at),
-    }, separators=(",", ":")).encode()
-    request = Request(
-        REGISTRATION_URL,
-        data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    with urlopen(request, timeout=15) as response:
-        if response.status != HTTPStatus.CREATED:
-            raise RuntimeError("AUTH rejected temporary-share registration")
-
-
-def revoke_registration(share_id: str) -> bool:
-    if not REVOCATION_URL.startswith("https://"):
-        raise RuntimeError("Remote Access requires an explicit HTTPS SHARE_AUTH_BASE_URL")
-    body = json.dumps({
-        "session_id": share_id,
-        "kind": ShareKind.REMOTE_ACCESS.value,
-    }, separators=(",", ":")).encode()
-    request = Request(
-        REVOCATION_URL,
-        data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    with urlopen(request, timeout=15) as response:
-        if response.status != HTTPStatus.OK:
-            raise RuntimeError("AUTH rejected temporary-share revocation")
-        return bool(json.loads(response.read() or b"{}").get("revoked"))
-
-
 def expire_loop() -> None:
     while True:
         time.sleep(1)
@@ -174,10 +133,6 @@ def expire_loop() -> None:
             expired_ids = {share_id for share_id, _metadata in expired}
             for share_id, metadata in expired:
                 close_owned_target(metadata)
-                try:
-                    revoke_registration(share_id)
-                except Exception:
-                    pass
             with sessions_lock:
                 for session, (share_id, _expires) in list(sessions.items()):
                     if share_id in expired_ids:
@@ -244,20 +199,6 @@ class BrokerHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
-        if parsed.path == "/v1/public/registration-proof":
-            token = self.headers.get("X-Share-Token", "")
-            record = store.get_by_token(token) if token else None
-            if (
-                self.headers.get("X-Share-Kind") == ShareKind.REMOTE_ACCESS.value
-                and record
-                and record.kind is ShareKind.REMOTE_ACCESS
-                and record.state is ShareState.OPEN
-            ):
-                self.send_response(HTTPStatus.NO_CONTENT)
-                self.end_headers()
-            else:
-                self.send_error(HTTPStatus.FORBIDDEN)
-            return
         if parsed.path == "/v1/public/authorize":
             self.authorize(
                 self.headers.get("X-Share-Token")
@@ -274,8 +215,8 @@ class BrokerHandler(BaseHTTPRequestHandler):
         kind = ShareKind(payload.get("kind", ""))
         if kind is not ShareKind.REMOTE_ACCESS:
             raise ValueError("this broker accepts only remote_access shares")
-        if not AUTH_BASE_URL.startswith("https://"):
-            raise ValueError("Remote Access is not configured: set an HTTPS SHARE_AUTH_BASE_URL")
+        if not PUBLIC_BASE.startswith("https://"):
+            raise ValueError("Remote Access is not configured: set an HTTPS SHARE_PUBLIC_BASE_URL")
         target = "local-browser"
         target_url = validate_target_url(payload.get("target_url"))
         ttl = int(payload.get("ttl_seconds", MAX_TTL))
@@ -289,10 +230,6 @@ class BrokerHandler(BaseHTTPRequestHandler):
             active_metadata = store.metadata(active.share_id)
             store.revoke(active.share_id)
             close_owned_target(active_metadata)
-            try:
-                revoke_registration(active.share_id)
-            except Exception:
-                pass
             with sessions_lock:
                 for session, (share_id, _expires) in list(sessions.items()):
                     if share_id == active.share_id:
@@ -314,7 +251,7 @@ class BrokerHandler(BaseHTTPRequestHandler):
         result = {
             "share_id": record.share_id,
             "public_token": token,
-            "public_url": f"{AUTH_BASE_URL}/access/remote/{token}",
+            "public_url": f"{PUBLIC_BASE}/access/remote/{token}",
             "expires_at": record.expires_at.isoformat(),
         }
         if kind is ShareKind.REMOTE_ACCESS:
@@ -323,12 +260,11 @@ class BrokerHandler(BaseHTTPRequestHandler):
             try:
                 with exclusive_browser_lifecycle():
                     listener("start", check=True)
-                    register_session(token, record.share_id, record.expires_at.timestamp())
             except Exception:
                 store.revoke(record.share_id)
                 close_browser_target(browser_target_id)
                 listener("stop")
-                raise ValueError("browser share startup or AUTH registration failed")
+                raise ValueError("browser share startup failed")
             result["otp"] = otp
         json_response(self, HTTPStatus.CREATED, result)
 
@@ -342,12 +278,7 @@ class BrokerHandler(BaseHTTPRequestHandler):
                     sessions.pop(session, None)
         if changed and not store.has_open(ShareKind.REMOTE_ACCESS):
             listener("stop")
-        try:
-            central_revoked = revoke_registration(share_id)
-        except Exception:
-            json_response(self, HTTPStatus.BAD_GATEWAY, {"revoked": changed, "central_revoked": False})
-            return
-        json_response(self, HTTPStatus.OK, {"revoked": changed, "central_revoked": central_revoked})
+        json_response(self, HTTPStatus.OK, {"revoked": changed})
 
     def otp_page(self, token: str) -> None:
         record = store.get_by_token(token)
@@ -396,7 +327,7 @@ class BrokerHandler(BaseHTTPRequestHandler):
             if session_data and session_data[1] <= now:
                 sessions.pop(session, None)
                 session_data = None
-        if not record or not session_data or session_data[0] != record.share_id:
+        if not record or record.state is not ShareState.OPEN or not session_data or session_data[0] != record.share_id:
             self.send_response(HTTPStatus.UNAUTHORIZED)
             self.end_headers()
             return
