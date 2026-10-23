@@ -20,7 +20,7 @@
 
 1. **Canonical toolset.** Plugin переопределяет `browser_exec` внутри штатного `browser`, а granular built-ins делает недоступными name-scoped overrides. Это устраняет unknown-toolset drift без возврата competing browser routes.
 2. **Live extension reconciliation.** Config/payload недостаточны: required contract — `config → browser-level getExtensions → loadUnpacked if missing → exact read-back → browser DSL`.
-3. **Extension acceptance.** Проверяются exact ID, version, path и `enabled=true`; функциональность uBlock подтверждается A/B effect, а не только listing.
+3. **Extension acceptance.** Для пользовательских расширений проверяются exact ID, version, path и `enabled=true`; default extension не поставляется.
 4. **Chrome recovery.** Active lifecycle container/target сам по себе не доказывает живой Chrome. Перед Browser Harness или Remote Access требуется CDP readiness.
 5. **Same-profile concurrency semantics.** Отдельные Browser Harness session/tab namespaces могут одновременно использовать один Chrome. B2 проверяет результат и изоляцию вкладок, а не наличие очереди.
 6. **Different-profile constraint.** Profile switch — глобальная lifecycle-операция для единственного Chrome; задачи разных profiles не должны пересекаться.
@@ -37,8 +37,6 @@
 - Remote Access сначала восстанавливает Chrome/CDP и только затем выдаёт ссылку; пустой X display не считается recovery.
 - Managed profile selector и Chrome launcher, совместимые с systemd и одним endpoint.
 - Linux ownership/permissions normalization для unpacked extensions.
-- Удаление Chrome Web Store `_metadata` из unpacked uBlock payload; иначе Chrome не активирует extension корректно.
-- Pinned uBlock Origin Lite `2026.812.1211`; browser-level activation и A/B blocking PASS.
 - Node-local Chrome args, egress, credentials, TLS keys, profile data и share state сохраняются при update и не входят в package.
 
 ## Windows-specific behavior/debt
@@ -48,7 +46,6 @@
 - D2 обновлён с pinned plugin `1.3.0` и отдельного `browser-harness 0.1.9` uv tool на внешний runtime `1.4.10`; профиль и registry сохранены. Windows installer выпускается как plugin `1.4.11`.
 - Windows installer восстанавливает inherited ACL для plugin, extension и skill trees после SSH/elevated install; без этого Limited Chrome/Gateway не читает manifest/plugin.
 - B2 same-profile concurrent real-agent behavior и B3 exception cleanup на D2 подтверждены browser target read-back.
-- Historical Windows NopeCHA state не переносится в Linux package. Linux package управляет только uBlock; CAPTCHA extension/configuration отложены.
 - Старые Windows installer artifacts не являются источником для новых установок; source of truth — `install-windows.py` и `windows/skill/` в plugin.
 
 ## Acceptance B1–B6 после ревизии

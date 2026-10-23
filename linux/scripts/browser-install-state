@@ -18,7 +18,6 @@ CONFIG_KEYS = (
     "browser.harness.executable",
     "browser.harness.user_data_dir",
     "browser.harness.profile_directory",
-    "browser.harness.extensions",
 )
 TOOLSETS = {
     "browser": True,
@@ -69,18 +68,12 @@ def delete_nested(data: dict[str, Any], key: str) -> None:
 
 
 def installed_config(user_data_dir: str) -> dict[str, dict[str, Any]]:
-    extension_path = "/usr/local/libexec/procvetaev-browser-harness/extensions/ublock-origin-lite/2026.812.1211"
     values: dict[str, Any] = {
         "browser.cloud_provider": "local",
         "browser.cdp_url": "http://127.0.0.1:9222",
         "browser.harness.executable": "/usr/bin/google-chrome-stable",
         "browser.harness.user_data_dir": user_data_dir,
         "browser.harness.profile_directory": "Default",
-        "browser.harness.extensions": [{
-            "id": "ddkjiahejlhfcafbddmgiahcphecmpfh",
-            "version": "2026.812.1211",
-            "path": extension_path,
-        }],
     }
     result = {key: {"present": True, "value": value} for key, value in values.items()}
     result["browser.backend"] = {"present": False}

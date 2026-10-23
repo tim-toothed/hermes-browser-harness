@@ -42,18 +42,18 @@ cd "$env:LOCALAPPDATA\hermes\plugins\browser-harness"
 The installer:
 
 - preserves the existing `%LOCALAPPDATA%\hermes\Hermes Automation` profile, its active Chrome subprofile such as `Profile 2`, and the managed-profile registry;
-- configures Chrome and uBlock Origin Lite `2026.812.1211` through Hermes config;
+- configures Chrome through Hermes config;
 - creates an interactive, Limited, `IgnoreNew` logon task for managed Chrome;
 - enables canonical `browser`, suppresses its granular built-in actions through the plugin, and disables `computer_use` for CLI and Telegram;
 - removes the obsolete `browser.backend`, `BU_NAME`/`BU_CDP_URL` user variables, and exact legacy `browser-harness 0.1.9` uv-tool install;
-- restores inherited ACLs on the plugin, extension, and installed skill trees so the Limited interactive Gateway/Chrome token can read them;
+- restores inherited ACLs on the plugin and installed skill trees so the Limited interactive Gateway/Chrome token can read them;
 - supports idempotent update installation and `--check-only` preflight.
 
 Restart Hermes through the node's supported interactive Gateway path after installation. Acceptance requires a real Hermes `browser_exec` page operation; config, process, package, or CDP checks alone are insufficient.
 
 ## Linux host installation
 
-The Linux package owns Google Chrome, Xvfb, Openbox, systemd lifecycle, managed profiles, uBlock Origin Lite, idle shutdown, and optional temporary Remote Access.
+The Linux package owns Google Chrome, Xvfb, Openbox, systemd lifecycle, managed profiles, idle shutdown, and optional temporary Remote Access.
 
 The plugin must already be enabled with tool-override consent. `install-linux.sh` verifies this before package installation or host mutation and fails closed otherwise.
 
@@ -70,7 +70,6 @@ The installer:
 - starts Chrome on demand through systemd and waits for loopback CDP readiness;
 - installs a persistent managed-profile registry and selector;
 - enables canonical `browser`, suppresses its granular built-in actions through the plugin, and disables `computer_use` for CLI and Telegram;
-- installs pinned uBlock Origin Lite `2026.812.1211` as a managed unpacked extension;
 - preserves profile data, registry, node-local Chrome arguments, credentials, and share state during update;
 - moves an unowned pre-existing `browser-harness` skill to a timestamped backup instead of deleting it;
 - records pre-install Hermes config and toolset membership for conditional restoration on uninstall.
@@ -152,7 +151,7 @@ Revoke, expiry, and replacement close only that owned tab. Existing manual tabs 
 
 ## CAPTCHA boundary
 
-The package manages only uBlock Origin Lite. The previously tested bundled/unpacked NopeCHA artifact is not shipped. CAPTCHA extension installation and credentials are deployment-specific and currently deferred; no CAPTCHA acceptance PASS is claimed by this release.
+CAPTCHA extension installation and credentials remain deployment-specific; no CAPTCHA acceptance is claimed.
 
 ## Platform parity
 
@@ -180,8 +179,12 @@ Functional release acceptance additionally requires a real Hermes session and br
 
 ## Third-party components
 
-The bundled Browser Harness runtime remains MIT licensed by Browser Use; see `runtime/BROWSER_HARNESS_LICENSE`. The pinned uBlock Origin Lite archive contains its upstream license and notices. See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+The bundled Browser Harness runtime remains MIT licensed by Browser Use; see `runtime/BROWSER_HARNESS_LICENSE` and `THIRD_PARTY_NOTICES.md`.
 
 ## License
 
 The plugin adapter plus Windows and Linux orchestration are MIT licensed by Timur Sharifullin / PROCVETAEV. Third-party components retain their own licenses.
+
+## User-configured extensions
+
+No extension archive or default ad blocker is shipped or installed. Existing `browser.harness.extensions` settings are preserved. Configure user-managed unpacked extensions with explicit `id`, `version`, and `path`; runtime reconciliation remains generic. The optional Linux `install-browser-extensions --spec FILE` helper accepts a user-supplied JSON artifact specification (see `--help`); `--configure-hermes` explicitly replaces the configured extension list and is not called by host setup.

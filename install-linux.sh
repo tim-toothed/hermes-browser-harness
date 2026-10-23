@@ -152,7 +152,6 @@ install -d -o root -g root -m 0700 /var/lib/procvetaev-browser-share /etc/procve
 install -d -o root -g root -m 0755 \
   "$RUNTIME_DST" \
   "$RUNTIME_DST/temporary-share" \
-  "$RUNTIME_DST/extension-artifacts/ublock-origin-lite/2026.812.1211" \
   /etc/caddy /etc/tmpfiles.d
 install -d -o root -g root -m 0755 "$HERMES_HOME/skills/browser-harness"
 
@@ -243,8 +242,6 @@ install -m 0755 "$LINUX/scripts/browser-install-state" "$RUNTIME_DST/browser-ins
 install -m 0755 "$LINUX/scripts/temporary-share/broker.py" "$RUNTIME_DST/temporary-share/broker.py"
 install -m 0644 "$LINUX/scripts/temporary-share/core.py" "$RUNTIME_DST/temporary-share/core.py"
 install -m 0644 "$LINUX/scripts/temporary-share/store.py" "$RUNTIME_DST/temporary-share/store.py"
-install -m 0644 "$ROOT/extensions/ublock-origin-lite/2026.812.1211/ublock-origin-lite-unpacked.zip" \
-  "$RUNTIME_DST/extension-artifacts/ublock-origin-lite/2026.812.1211/ublock-origin-lite-unpacked.zip"
 install -m 0644 "$LINUX/caddy/procvetaev-browser-share.Caddyfile" /etc/caddy/procvetaev-browser-share.Caddyfile
 install -m 0644 "$LINUX/systemd/tmpfiles-procvetaev-browser.conf" /etc/tmpfiles.d/procvetaev-browser.conf
 install -m 0644 "$ROOT/skill/SKILL.md" "$HERMES_HOME/skills/browser-harness/SKILL.md"
@@ -285,7 +282,6 @@ hermes config set --force browser.cdp_url http://127.0.0.1:9222
 hermes config set --force browser.harness.executable /usr/bin/google-chrome-stable
 hermes config set --force browser.harness.user_data_dir "$default_profile_path"
 hermes config set --force browser.harness.profile_directory Default
-"$HERMES_PYTHON" "$RUNTIME_DST/install-browser-extensions" --configure-hermes >/dev/null
 hermes tools disable computer_use --platform cli >/dev/null
 hermes tools disable computer_use --platform telegram >/dev/null
 for platform in cli telegram; do

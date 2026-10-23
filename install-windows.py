@@ -3,7 +3,7 @@
 
 Run this script from an already installed and enabled browser-harness plugin
 checkout. It configures one managed Chrome profile on loopback CDP, installs
-the pinned unpacked extension and policy skill, and creates an interactive
+the policy skill, and creates an interactive
 logon task. The Browser Harness Python runtime remains bundled with the plugin.
 """
 
@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import csv
 import getpass
-import hashlib
 import html
 import io
 import json
@@ -24,7 +23,6 @@ import subprocess
 import sys
 import tempfile
 import urllib.request
-import zipfile
 import xml.etree.ElementTree as ET
 from pathlib import Path, PureWindowsPath
 
@@ -37,11 +35,7 @@ PROFILE_DIRECTORY = "Hermes Automation"
 TASK_NAME = r"\PROCVETAEV\Browser Harness Chrome"
 TASK_FOLDER = r"\PROCVETAEV"
 LEGACY_TASK_NAMES = (r"\Hermes_Agent_Chrome",)
-UBOL_ID = "ddkjiahejlhfcafbddmgiahcphecmpfh"
-UBOL_VERSION = "2026.812.1211"
-UBOL_SHA256 = "fd910beea9e130ec63b8dc6a8a13e529fc2ab114f9e6e120c9ba36ccf01d1ce3"
 ROOT = Path(__file__).resolve().parent
-UBOL_ARCHIVE = ROOT / "extensions" / "ublock-origin-lite" / UBOL_VERSION / "ublock-origin-lite-unpacked.zip"
 WINDOWS_SKILL = ROOT / "windows" / "skill" / "SKILL.md"
 OWNER_MARKER = ".windows-browser-harness-owned"
 
@@ -82,19 +76,11 @@ def resolve_chrome() -> Path:
     raise RuntimeError("Google Chrome is required but chrome.exe was not found.")
 
 
-def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def validate_package() -> None:
     manifest = ROOT / "plugin.yaml"
     runtime_project = ROOT / "runtime" / "pyproject.toml"
     runtime_lock = ROOT / "runtime" / "uv.lock"
-    for required in (manifest, runtime_project, runtime_lock, UBOL_ARCHIVE, WINDOWS_SKILL):
+    for required in (manifest, runtime_project, runtime_lock, WINDOWS_SKILL):
         if not required.is_file():
             raise RuntimeError(f"Package is incomplete: {required}")
     manifest_text = manifest.read_text(encoding="utf-8")
@@ -103,8 +89,6 @@ def validate_package() -> None:
     runtime_text = runtime_project.read_text(encoding="utf-8")
     if not re.search(rf'(?m)^version\s*=\s*"{re.escape(BROWSER_HARNESS_VERSION)}"\s*$', runtime_text):
         raise RuntimeError(f"Bundled Browser Harness runtime is not {BROWSER_HARNESS_VERSION}.")
-    if sha256(UBOL_ARCHIVE) != UBOL_SHA256:
-        raise RuntimeError("Pinned uBlock Origin Lite archive checksum does not match.")
 
 
 def normalize_windows_acl(path: Path) -> bool:
@@ -169,91 +153,6 @@ def verify_plugin_enabled(hermes: Path) -> None:
             f"browser-harness plugin must be enabled at {PLUGIN_VERSION}; "
             f"found version={plugin.get('version')!r}, status={plugin.get('status')!r}."
         )
-
-
-def archive_members(archive: zipfile.ZipFile) -> list[zipfile.ZipInfo]:
-    members = []
-    for item in archive.infolist():
-        relative = PureWindowsPath(item.filename.replace("/", "\\"))
-        if relative.is_absolute() or ".." in relative.parts:
-            raise RuntimeError(f"Unsafe extension archive member: {item.filename}")
-        if item.filename.startswith("_metadata/"):
-            continue
-        members.append(item)
-    return members
-
-
-def extension_payload_matches(target: Path) -> bool:
-    if not target.is_dir():
-        return False
-    expected: dict[tuple[str, ...], str] = {}
-    with zipfile.ZipFile(UBOL_ARCHIVE) as archive:
-        for item in archive_members(archive):
-            if item.is_dir():
-                continue
-            relative = PureWindowsPath(item.filename.replace("/", "\\"))
-            expected[tuple(relative.parts)] = hashlib.sha256(archive.read(item)).hexdigest()
-    actual: dict[tuple[str, ...], str] = {}
-    for path in target.rglob("*"):
-        if not path.is_file():
-            continue
-        relative = path.relative_to(target)
-        if relative.parts and relative.parts[0] == "_metadata":
-            continue
-        actual[tuple(relative.parts)] = sha256(path)
-    return actual == expected
-
-
-def install_ubol(hermes_home: Path) -> Path:
-    target = hermes_home / "extensions" / "ublock-origin-lite" / UBOL_VERSION
-    target.parent.mkdir(parents=True, exist_ok=True)
-    backups = sorted(target.parent.glob(f".{target.name}.backup.*"))
-    if len(backups) > 1:
-        raise RuntimeError("Multiple interrupted extension backups require operator review.")
-    if backups and not target.exists():
-        os.replace(backups[0], target)
-        backups = []
-    elif backups and target.exists():
-        if not extension_payload_matches(target):
-            raise RuntimeError("Extension target and interrupted backup conflict.")
-        shutil.rmtree(backups[0])
-        backups = []
-    for stale in target.parent.glob(f".{target.name}.*"):
-        if stale.is_dir() and ".backup." not in stale.name:
-            shutil.rmtree(stale)
-    manifest_path = target / "manifest.json"
-    if manifest_path.is_file():
-        try:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            if manifest.get("version") == UBOL_VERSION and extension_payload_matches(target):
-                return target
-        except (OSError, json.JSONDecodeError):
-            pass
-    temporary = Path(tempfile.mkdtemp(prefix=f".{UBOL_VERSION}.", dir=target.parent))
-    try:
-        with zipfile.ZipFile(UBOL_ARCHIVE) as archive:
-            for item in archive_members(archive):
-                archive.extract(item, temporary)
-        manifest = json.loads((temporary / "manifest.json").read_text(encoding="utf-8"))
-        if manifest.get("version") != UBOL_VERSION:
-            raise RuntimeError("Extracted uBlock Origin Lite version does not match.")
-        backup = target.with_name(f".{target.name}.backup.{os.getpid()}")
-        if backup.exists():
-            shutil.rmtree(backup)
-        if target.exists():
-            os.replace(target, backup)
-        try:
-            os.replace(temporary, target)
-        except Exception:
-            if backup.exists() and not target.exists():
-                os.replace(backup, target)
-            raise
-        if backup.exists():
-            shutil.rmtree(backup)
-    finally:
-        if temporary.exists():
-            shutil.rmtree(temporary)
-    return target
 
 
 def write_json_atomic(path: Path, payload: object) -> None:
@@ -405,11 +304,9 @@ def configure_hermes(
     chrome: Path,
     user_data_dir: Path,
     profile_directory: str,
-    extension_path: Path,
     cdp_port: int,
 ) -> None:
     cdp_url = f"http://{CDP_HOST}:{cdp_port}"
-    extension = {"id": UBOL_ID, "version": UBOL_VERSION, "path": str(extension_path)}
     values = {
         "browser.cloud_provider": "local",
         "browser.cdp_url": cdp_url,
@@ -417,7 +314,6 @@ def configure_hermes(
         "browser.harness.executable": str(chrome),
         "browser.harness.user_data_dir": str(user_data_dir),
         "browser.harness.profile_directory": profile_directory,
-        "browser.harness.extensions": [extension],
     }
     write_browser_config(hermes_home, values)
     for key, value in values.items():
@@ -699,10 +595,9 @@ def main() -> int:
         if registry_path.is_file():
             validate_registry(json.loads(registry_path.read_text(encoding="utf-8")))
         validate_readable_tree(ROOT)
-        validate_readable_tree(hermes_home / "extensions" / "ublock-origin-lite")
         validate_readable_tree(hermes_home / "skills" / "browser-harness")
         run([uv, "tool", "list"])
-        for parent in (hermes_home, hermes_home / "extensions", hermes_home / "skills"):
+        for parent in (hermes_home, hermes_home / "skills"):
             existing_parent = next((candidate for candidate in (parent, *parent.parents) if candidate.exists()), None)
             if existing_parent is None or not os.access(existing_parent, os.W_OK):
                 raise RuntimeError(f"Installer cannot write below: {parent}")
@@ -711,11 +606,9 @@ def main() -> int:
             return 0
         plugin_acl_normalized = normalize_windows_acl(ROOT)
         (ROOT / "plugin.yaml").read_text(encoding="utf-8")
-        extension_path = install_ubol(hermes_home)
         skill_path, registry_path = install_skill(hermes_home, user_data_dir)
-        extension_acl_normalized = normalize_windows_acl(extension_path)
         skill_acl_normalized = normalize_windows_acl(skill_path.parent)
-        configure_hermes(hermes, hermes_home, chrome, user_data_dir, profile_directory, extension_path, args.cdp_port)
+        configure_hermes(hermes, hermes_home, chrome, user_data_dir, profile_directory, args.cdp_port)
         if not args.skip_logon_task:
             install_logon_task(chrome, user_data_dir, profile_directory, args.cdp_port)
             removed_legacy_tasks = remove_legacy_logon_tasks(legacy_tasks)
@@ -728,13 +621,11 @@ def main() -> int:
             "plugin_version": PLUGIN_VERSION,
             "runtime_version": BROWSER_HARNESS_VERSION,
             "plugin_acl_normalized": plugin_acl_normalized,
-            "extension_acl_normalized": extension_acl_normalized,
             "skill_acl_normalized": skill_acl_normalized,
             "cdp_url": f"http://{CDP_HOST}:{args.cdp_port}",
             "chrome": str(chrome),
             "user_data_dir": str(user_data_dir),
             "profile_directory": profile_directory,
-            "extension_path": str(extension_path),
             "skill": str(skill_path),
             "profile_registry": str(registry_path),
             "logon_task": None if args.skip_logon_task else TASK_NAME,

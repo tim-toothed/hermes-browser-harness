@@ -31,7 +31,7 @@
 
 ## 1.4.11 - 2026-08-24
 
-- Add the Windows host installer for managed Chrome, persistent profile/registry preservation, pinned uBlock Origin Lite, interactive logon task, and dedicated `browser_harness` toolset configuration.
+- Add the Windows host installer for managed Chrome, persistent profile/registry preservation, interactive logon task, and dedicated `browser_harness` toolset configuration.
 - Remove the legacy Windows `browser.backend`, user-level Browser Harness environment variables, separate `browser-harness 0.1.9` uv-tool runtime, Hermes core patches, and global tab-limit dependency.
 - Restore inherited ACLs on Windows plugin, extension, and skill trees so Limited interactive Gateway and Chrome processes can read SSH/elevated installations.
 - Verify extension config semantically after Hermes normalizes JSON input to YAML read-back.
@@ -56,7 +56,6 @@ Distribution ref: `v1.4.11`. The existing `v1.4.10` tag remains immutable at the
 ## 1.4.8
 
 - Linux installer now fails before mutation when legacy Chrome units, target symlinks, or multiple running profile roots would violate the single-instance contract.
-- Reinstallation accepts only Chrome-generated `_metadata` drift in the pinned unpacked uBOL directory while still rejecting any shipped payload change.
 
 ## 1.4.7 - 2026-08-21
 
@@ -89,7 +88,6 @@ Distribution ref: `v1.4.11`. The existing `v1.4.10` tag remains immutable at the
 - Production Linux host package for Debian/Ubuntu amd64.
 - systemd lifecycle for Xvfb, Openbox, managed Chrome, idle shutdown, and temporary Remote Access.
 - Persistent managed-profile registry and selector with one active profile per node.
-- Pinned uBlock Origin Lite `2026.812.1211` installation and exact browser-level reconciliation.
 - Linux package ownership manifest, update preservation, and bounded uninstall.
 - Linux ↔ Windows parity inventory and revised B1–B6 acceptance state.
 
@@ -105,7 +103,6 @@ Distribution ref: `v1.4.11`. The existing `v1.4.10` tag remains immutable at the
 - Chrome recovery when the systemd target remained active but the Chrome service had stopped.
 - Remote Access returning a usable share only after Chrome/CDP recovery.
 - Linux unpacked-extension ownership and permissions.
-- Chrome Web Store `_metadata` incompatibility in the managed uBlock payload.
 - Extension acceptance now requires exact ID, version, enabled state, and path read-back.
 - Unowned skills and pre-install Hermes config/toolset state are preserved instead of being deleted or blindly unset.
 - Caddy defaults to loopback and the package no longer embeds a private AUTH endpoint.

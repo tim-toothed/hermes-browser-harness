@@ -80,7 +80,7 @@ A Windows installation is accepted only when all of the following are proven:
 1. Plugin version is `1.4.15` and bundled Browser Harness runtime is `0.1.9`.
 2. Canonical toolset `browser` is enabled and exposes plugin-owned `browser_exec` without granular built-in browser actions; `computer_use` is disabled for CLI and Telegram.
 3. Chrome listens only on loopback `127.0.0.1:9222` with the selected registry `user_data_dir`.
-4. The pinned extension is loaded from the configured agent-owned path with the expected id/version.
+4. User-configured extensions, when present, are loaded from their configured paths with the expected id/version.
 5. `browser_exec` completes a real page operation through Hermes.
 6. Existing managed profile data and its configured Chrome subprofile survive an update install.
 

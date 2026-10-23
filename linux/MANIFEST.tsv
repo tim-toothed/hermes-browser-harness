@@ -9,7 +9,6 @@ linux/scripts/browser-profile	/usr/local/libexec/procvetaev-browser-harness/brow
 linux/scripts/browser-chrome-launch	/usr/local/libexec/procvetaev-browser-harness/browser-chrome-launch	package-owned
 linux/scripts/install-browser-extensions	/usr/local/libexec/procvetaev-browser-harness/install-browser-extensions	package-owned
 linux/scripts/browser-install-state	/usr/local/libexec/procvetaev-browser-harness/browser-install-state	package-owned
-extensions/ublock-origin-lite/2026.812.1211/ublock-origin-lite-unpacked.zip	/usr/local/libexec/procvetaev-browser-harness/extension-artifacts/ublock-origin-lite/2026.812.1211/ublock-origin-lite-unpacked.zip	package-owned pinned artifact
 -	/usr/local/libexec/procvetaev-browser-harness/extensions	package-owned verified payloads
 linux/scripts/temporary-share/broker.py	/usr/local/libexec/procvetaev-browser-harness/temporary-share/broker.py	package-owned
 linux/scripts/temporary-share/core.py	/usr/local/libexec/procvetaev-browser-harness/temporary-share/core.py	package-owned
