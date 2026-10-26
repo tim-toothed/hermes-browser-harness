@@ -1,0 +1,44 @@
+{
+ admin off
+ auto_https off
+}
+:80 {
+ handle /.well-known/acme-challenge/* {
+  root * /usr/share/caddy
+  file_server
+ }
+ handle {
+  respond 404
+ }
+}
+https://@PUBLIC_HOST@ {
+ tls /etc/letsencrypt/live/remote-access-ip/fullchain.pem /etc/letsencrypt/live/remote-access-ip/privkey.pem
+ @nonIntake not path /access/secret-intake/*
+ header @nonIntake Referrer-Policy no-referrer
+ # Intake owns its same-origin policy; do not append a conflicting proxy header.
+ header {
+  X-Content-Type-Options nosniff
+  Cache-Control no-store
+ }
+ @landing path_regexp landing ^/access/remote/[^/]+/?$
+ handle @landing {
+  reverse_proxy 127.0.0.1:8790
+ }
+ handle /v1/public/otp/* {
+  reverse_proxy 127.0.0.1:8790
+ }
+ @remote path_regexp remote ^/access/remote/([^/]+)(/.*)$
+ handle @remote {
+  forward_auth 127.0.0.1:8790 {
+   uri /v1/public/authorize
+   header_up X-Share-Token {http.regexp.remote.1}
+  }
+  rewrite * {http.regexp.remote.2}
+  reverse_proxy 127.0.0.1:6080
+ }
+ @intake path_regexp intake ^/access/secret-intake/[A-Za-z0-9_-]{32,128}$
+ handle @intake {
+  reverse_proxy 127.0.0.1:8792
+ }
+ respond 404
+}

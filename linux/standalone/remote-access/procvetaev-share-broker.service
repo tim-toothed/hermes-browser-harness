@@ -1,0 +1,24 @@
+[Unit]
+Description=PROCVETAEV temporary share broker
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/libexec/procvetaev-browser-harness/temporary-share/broker.py
+Restart=always
+RestartSec=2
+User=root
+Environment=SHARE_BROKER_BIND=127.0.0.1
+Environment=SHARE_BROKER_PORT=8790
+Environment=BROWSER_SHARE_PORT=8791
+EnvironmentFile=-/etc/procvetaev-browser/.env
+Environment=SHARE_BROKER_DB=/var/lib/procvetaev-browser-share/shares.sqlite
+Environment=SHARE_BROKER_PEPPER_FILE=/etc/procvetaev-browser/share.pepper
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/procvetaev-browser-share
+
+[Install]
+WantedBy=multi-user.target

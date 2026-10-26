@@ -1,0 +1,9 @@
+[Unit]
+Description=Standalone on-demand browser view transport
+Requires=procvetaev-browser.target procvetaev-novnc.service
+After=procvetaev-browser.target procvetaev-novnc.service
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/true
+Restart=no

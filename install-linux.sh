@@ -3,6 +3,12 @@ set -euo pipefail
 
 [[ ${EUID:-$(id -u)} -eq 0 ]] || { echo "run as root" >&2; exit 1; }
 command -v hermes >/dev/null || { echo "Hermes CLI is required" >&2; exit 1; }
+# Public access configuration is owned by this Linux package. The stage-only
+# entrypoint lets deployment orchestrators reuse it without reinstalling Chrome.
+if [[ ${1:-} == --remote-access-only ]]; then
+  shift
+  exec bash "$(dirname -- "${BASH_SOURCE[0]}")/install-remote-access-linux.sh" "$@"
+fi
 [[ $(dpkg --print-architecture) == amd64 ]] || { echo "Only amd64 Linux VPS is currently supported" >&2; exit 1; }
 hermes plugins list --plain --no-bundled \
   | awk '$1 == "enabled" && $NF == "browser-harness" { found=1 } END { exit !found }' \
@@ -303,4 +309,8 @@ if [[ -n "$unowned_skill_backup" ]]; then
   printf '%s\n' "Previous unowned skill preserved at: $unowned_skill_backup"
 fi
 printf '%s\n' "Restart Hermes Gateway to load the installed Browser Harness runtime."
-printf '%s\n' "Remote Access additionally requires node-specific broker.crt and broker.key."
+if [[ $# -gt 0 ]]; then
+  bash "$ROOT/install-remote-access-linux.sh" "$@"
+else
+  printf '%s\n' "For node-local HTTPS/OTP run this installer with: install --target-hostname HOST --confirm-install --public-host HOST --confirm-http01 --acme-without-email"
+fi

@@ -1,0 +1,14 @@
+[Unit]
+Description=PROCVETAEV loopback noVNC gateway
+Requires=procvetaev-x11vnc.service
+After=procvetaev-x11vnc.service
+PartOf=procvetaev-browser.target procvetaev-browser-share.service
+
+[Service]
+Type=simple
+User=procvetaev-browser
+Group=procvetaev-browser
+Environment=HOME=/var/lib/procvetaev-browser
+ExecStart=/usr/bin/websockify --web=/usr/share/novnc 127.0.0.1:6080 127.0.0.1:5900
+Restart=on-failure
+RestartSec=2

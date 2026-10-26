@@ -1,0 +1,5 @@
+[Unit]
+Description=Renew standalone IP certificate
+[Service]
+Type=oneshot
+ExecStart=/opt/remote-access-acme/bin/certbot renew --quiet --deploy-hook "systemctl restart remote-access-gateway.service"

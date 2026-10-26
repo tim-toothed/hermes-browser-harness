@@ -1,0 +1,9 @@
+[Unit]
+Description=Standalone Remote Access HTTPS gateway
+After=network-online.target
+[Service]
+ExecStart=/usr/bin/caddy run --config /etc/caddy/remote-access.Caddyfile --adapter caddyfile
+ExecReload=/usr/bin/caddy reload --config /etc/caddy/remote-access.Caddyfile --adapter caddyfile
+Restart=on-failure
+[Install]
+WantedBy=multi-user.target
