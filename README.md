@@ -1,6 +1,6 @@
-![Hermes Browser Harness](assets/banner.png)
-
 # Hermes Browser Harness
+
+![Hermes Browser Harness](assets/banner.png)
 
 Give Hermes Agent a persistent Google Chrome browser you can access remotely, even on a headless Linux server.
 
