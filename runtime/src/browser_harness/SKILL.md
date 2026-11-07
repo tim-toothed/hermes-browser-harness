@@ -1,7 +1,7 @@
 ---
 name: browser-harness
 description: Use plugin-owned browser_exec with managed Chrome.
-version: 1.4.17
+version: 1.5.0
 ---
 
 # Bundled Browser Harness policy
@@ -18,4 +18,4 @@ This runtime is embedded in the Hermes Browser Harness plugin. Use the plugin-ow
 - Do not launch another Chrome, reset profiles, change configuration, use Browser Use cloud or perform global target cleanup as a fallback. Diagnose the managed path.
 - Targets persist across calls within one task. The plugin's session-end hook closes only task-owned targets and its daemon, leaving concurrent tasks untouched.
 
-The upstream runtime version remains `0.1.9`; plugin policy/version is `1.4.17`. Bundled implementation does not imply support for every upstream CLI/cloud workflow.
+The upstream runtime version remains `0.1.9`; plugin policy/version is `1.5.0`. Bundled implementation does not imply support for every upstream CLI/cloud workflow.

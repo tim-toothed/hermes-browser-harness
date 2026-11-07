@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.0
+
+- Default screenshots to JPEG quality 85 with a dedicated 15-second timeout; preserve explicit PNG output and the 5-second timeout for other commands.
+- Keep POSIX IPC socket paths short when Hermes supplies a deep TMPDIR; Windows IPC placement is unchanged.
+- Verified on STORAGE2 with Hermes v0.23.0: real agent browser operations, scheduled browser execution, cold startup and temporary Remote Access HTTPS/WSS. Windows runtime smoke was not performed for this release.
+
 ## 1.4.17
 
 - Fix Windows task startup/cleanup races and normalize scheduled task runtime names.

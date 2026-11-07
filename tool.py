@@ -32,7 +32,7 @@ _IMAGE_PATH_RE = re.compile(
     r"((?:[A-Za-z]:[\\/]|/)[^\s\"']+?\.(?:png|jpe?g|webp))", re.IGNORECASE
 )
 _RUNTIME_DIR = Path(__file__).resolve().parent / "runtime"
-_STATE_VERSION = "plugin-1.4.17-runtime-0.1.9"
+_STATE_VERSION = "plugin-1.5.0-runtime-0.1.9"
 
 _DESCRIPTION = (
     "Drive configured managed Google Chrome through the bundled Browser Harness "
@@ -498,7 +498,11 @@ def _base_env() -> dict:
     config = home / "config"
     tmp = home / "tmp"
     runtime_key = hashlib.sha256(str(home.resolve()).encode("utf-8")).hexdigest()[:12]
-    runtime = Path(tempfile.gettempdir()) / f"hbh-{runtime_key}"
+    # Hermes sets TMPDIR to its deep cache/scratch tree. POSIX IPC sockets
+    # need a short path (sun_path is only 104 bytes on macOS, 108 on Linux).
+    # Keep artifacts in BH_TMP_DIR; only private IPC endpoints live here.
+    runtime_root = Path(tempfile.gettempdir()) if os.name == "nt" else Path("/tmp")
+    runtime = runtime_root / f"hbh-{runtime_key}"
     for path in (home, config, tmp, runtime):
         path.mkdir(parents=True, exist_ok=True)
     if os.name != "nt":
