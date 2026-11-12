@@ -24,6 +24,14 @@ hermes plugins enable browser-harness --allow-tool-override
 
 Then install the Chrome host package for your platform.
 
+### Verify activation
+
+Start a **new Hermes chat** and ask it to use `browser_exec` to open `https://example.com` and return the page title. Verify the actual tool result, not only the assistant's summary. Existing sessions may retain their previous tool set.
+
+Some Hermes versions run `hermes plugins doctor browser-harness` under a temporary `HERMES_HOME` without the installed profile's override permission. In that case Doctor can report a `browser_back` override conflict even after `hermes plugins enable browser-harness --allow-tool-override`. This diagnostic alone does not establish a runtime failure. Confirm the permission in the intended profile and perform the fresh-chat check above. If the real invocation also fails, investigate that error; do not ignore it or disable override safeguards. The first invocation may bootstrap the bundled runtime's Python environment.
+
+Install from the repository root; this repository has no `community` installation subdirectory.
+
 ### Windows
 
 Uses installed Google Chrome and a persistent agent-owned profile.

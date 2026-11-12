@@ -96,6 +96,9 @@ def install(spec: dict[str, object]) -> Path:
     artifact = Path(spec["artifact"])
     target = Path(spec["target"])
     if extracted_payload_matches(spec):
+        metadata = target / "_metadata"
+        if metadata.exists():
+            shutil.rmtree(metadata)
         normalize_payload_permissions(target)
         return target
     if target.exists():
