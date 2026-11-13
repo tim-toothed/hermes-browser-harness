@@ -278,13 +278,14 @@ class BrokerHandler(BaseHTTPRequestHandler):
             listener("stop")
         json_response(self, HTTPStatus.OK, {"revoked": changed})
 
-    def otp_page(self, token: str) -> None:
+    def otp_page(self, token: str, message: str = "", status: int = HTTPStatus.OK) -> None:
         record = store.get_by_token(token)
         if not record or record.kind is not ShareKind.REMOTE_ACCESS or record.state is not ShareState.OPEN:
             self.send_error(HTTPStatus.GONE)
             return
-        body = f"""<!doctype html><meta name=viewport content='width=device-width,initial-scale=1'><title>Browser access</title><form method=post action='/v1/public/otp/{token}'><label>OTP <input name=otp autocomplete=one-time-code required maxlength=6></label><button>Open browser</button></form>""".encode()
-        self.send_response(HTTPStatus.OK)
+        from html import escape
+        body = (ROOT / "otp.html").read_text().replace("__ACTION__", escape("/v1/public/otp/" + token, quote=True)).replace("__STATUS__", escape(message)).encode()
+        self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(body)))
@@ -304,7 +305,7 @@ class BrokerHandler(BaseHTTPRequestHandler):
             json_response(self, HTTPStatus.GONE, {"error": "share unavailable"})
             return
         if not store.verify_otp(record.share_id, hash_token(otp, pepper)):
-            json_response(self, HTTPStatus.TOO_MANY_REQUESTS, {"error": "otp rejected"})
+            self.otp_page(token, "Неверный код.", HTTPStatus.UNAUTHORIZED)
             return
         session = generate_token()
         with sessions_lock:

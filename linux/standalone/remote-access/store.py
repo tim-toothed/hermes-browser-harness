@@ -116,14 +116,14 @@ class ShareStore:
     @locked
     def verify_otp(self, share_id: str, otp_hash: str) -> bool:
         row = self._connection.execute("SELECT otp_hash, otp_attempts, state FROM shares WHERE share_id = ?", (share_id,)).fetchone()
-        if not row or row["state"] != ShareState.OPEN.value or not row["otp_hash"] or row["otp_attempts"] >= 5:
+        if not row or row["state"] != ShareState.OPEN.value or not row["otp_hash"] or row["otp_attempts"] >= 3:
             return False
         valid = hmac.compare_digest(row["otp_hash"], otp_hash)
         if valid:
             self._connection.execute("UPDATE shares SET otp_hash = NULL WHERE share_id = ? AND state = ?", (share_id, ShareState.OPEN.value))
         else:
             attempts = row["otp_attempts"] + 1
-            state = ShareState.REVOKED.value if attempts >= 5 else ShareState.OPEN.value
+            state = ShareState.REVOKED.value if attempts >= 3 else ShareState.OPEN.value
             self._connection.execute("UPDATE shares SET otp_attempts = ?, state = ? WHERE share_id = ? AND state = ?", (attempts, state, share_id, ShareState.OPEN.value))
         self._connection.commit()
         return valid
