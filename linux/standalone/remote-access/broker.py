@@ -281,10 +281,14 @@ class BrokerHandler(BaseHTTPRequestHandler):
     def otp_page(self, token: str, message: str = "", status: int = HTTPStatus.OK) -> None:
         record = store.get_by_token(token)
         if not record or record.kind is not ShareKind.REMOTE_ACCESS or record.state is not ShareState.OPEN:
-            self.send_error(HTTPStatus.GONE)
-            return
+            message = "Запросите у REDD новую ссылку."
+            status = HTTPStatus.GONE
         from html import escape
         body = (ROOT / "otp.html").read_text().replace("__ACTION__", escape("/v1/public/otp/" + token, quote=True)).replace("__STATUS__", escape(message)).encode()
+        if status == HTTPStatus.GONE:
+            body = body.replace("Доступ к браузеру".encode(), "Доступ закрыт".encode()).replace("<p>Ссылка действует 10 минут и используется один раз.</p>".encode(), b"")
+            import re
+            body = re.sub(rb"<form.*?</form>", b"", body, flags=re.S)
         self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Cache-Control", "no-store")
@@ -305,16 +309,25 @@ class BrokerHandler(BaseHTTPRequestHandler):
             json_response(self, HTTPStatus.GONE, {"error": "share unavailable"})
             return
         if not store.verify_otp(record.share_id, hash_token(otp, pepper)):
+            current = store.get_by_token(token)
+            if "application/json" in self.headers.get("Accept", ""):
+                json_response(self, HTTPStatus.UNAUTHORIZED if current and current.state is ShareState.OPEN else HTTPStatus.GONE, {"error": "otp rejected"})
+                return
             self.otp_page(token, "Неверный код.", HTTPStatus.UNAUTHORIZED)
             return
         session = generate_token()
         with sessions_lock:
             sessions[session] = (record.share_id, record.expires_at.timestamp())
-        self.send_response(HTTPStatus.SEE_OTHER)
+        wants_json = "application/json" in self.headers.get("Accept", "")
+        self.send_response(HTTPStatus.OK if wants_json else HTTPStatus.SEE_OTHER)
         self.send_header("Location", f"/access/remote/{token}/vnc.html?autoconnect=true&resize=scale&path=access/remote/{token}/websockify")
         self.send_header("Set-Cookie", f"share_session={session}; Path=/access/remote/{token}/; HttpOnly; Secure; SameSite=Strict; Max-Age={max(1,int(record.expires_at.timestamp()-time.time()))}")
         self.send_header("Cache-Control", "no-store")
+        if wants_json:
+            self.send_header("Content-Type", "application/json")
         self.end_headers()
+        if wants_json:
+            self.wfile.write(json.dumps({"location": f"/access/remote/{token}/vnc.html?autoconnect=true&resize=scale&path=access/remote/{token}/websockify"}).encode())
 
 
     def authorize(self, token: str) -> None:
