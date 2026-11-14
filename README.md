@@ -126,6 +126,16 @@ Open the returned link from another device, enter the OTP, and confirm that Chro
 - The default Linux idle timeout is 60 minutes.
 - Extensions are user-configured; none are bundled.
 
+## Roadmap
+
+Planned improvements; availability and scope may change.
+
+- **Browser-only remote access.** Replace noVNC with [Browserface](https://github.com/browserface/browserface), a browser-focused remote interface. Extension visibility remains a blocker for the migration.
+- **CAPTCHA and antibot workflows.** Evaluate supported automation, instruction-related limitations, and clear handoff to a human when manual verification is required.
+- **Concurrent profiles.** Support multiple active browser profiles with memory-aware scheduling and account isolation, including on resource-constrained Linux hosts.
+- **Windows access tools.** Bring Secret Intake and temporary, OTP-protected Remote Access to Windows, using the planned Browserface integration.
+- **Clearer version reporting.** Distinguish the Hermes Browser Harness release from the bundled upstream runtime version in diagnostics and update messages.
+
 ## Credits and license
 
 Uses Browser Use’s Browser Harness runtime, distributed under its upstream MIT license.
