@@ -93,6 +93,7 @@ def stage_main(name,install,check):
     p.add_argument('--target-hostname');p.add_argument('--confirm-install',action='store_true')
     p.add_argument('--after-reinstall',action='store_true')
     p.add_argument('--public-host');p.add_argument('--acme-email');p.add_argument('--confirm-http01',action='store_true')
+    p.add_argument('--acme-server');p.add_argument('--acme-ca-bundle')
     p.add_argument('--acme-without-email',action='store_true',help='Explicitly register ACME without contact email')
     args=p.parse_args()
     try:

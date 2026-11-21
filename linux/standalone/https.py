@@ -19,14 +19,29 @@ def install(a):
     run('systemctl','disable','--now','caddy.service');run('systemctl','daemon-reload');run('systemctl','restart','remote-access-gateway.service')
     flags=['--cert-name','remote-access-ip','--webroot','-w','/usr/share/caddy','--non-interactive','--agree-tos']
     flags+=['--email',a.acme_email] if a.acme_email else ['--register-unsafely-without-email']
+    if a.acme_server:
+        require(a.acme_ca_bundle and Path(a.acme_ca_bundle).is_file(),'Custom ACME server requires an existing --acme-ca-bundle')
+        flags+=['--server',a.acme_server]
+    environment=os.environ.copy()
+    if a.acme_ca_bundle:environment['REQUESTS_CA_BUNDLE']=a.acme_ca_bundle
     try:ipaddress.ip_address(value);flags+=['--ip-address',value,'--required-profile','shortlived']
     except ValueError:flags+=['-d',value]
-    run(ACME/'bin/certbot','certonly',*flags)
+    subprocess.run([str(ACME/'bin/certbot'),'certonly',*flags],check=True,env=environment)
     put('/etc/caddy/remote-access.Caddyfile',final)
     run('caddy','validate','--config','/etc/caddy/remote-access.Caddyfile','--adapter','caddyfile')
     run('systemctl','restart','remote-access-gateway.service');run('systemctl','enable','remote-access-gateway.service','remote-access-renew.timer');run('systemctl','start','remote-access-renew.timer')
 def check(a):
     public_host(a);active('remote-access-gateway.service','remote-access-renew.timer')
     require(Path('/etc/letsencrypt/live/remote-access-ip/fullchain.pem').exists(),'Certificate missing')
-    denial('https://'+a.public_host+'/',[404]);run('caddy','validate','--config','/etc/caddy/remote-access.Caddyfile','--adapter','caddyfile')
+    if a.acme_ca_bundle:
+        import ssl
+        from urllib.request import urlopen
+        from urllib.error import HTTPError
+        context=ssl.create_default_context(cafile=a.acme_ca_bundle)
+        try:
+            with urlopen('https://'+a.public_host+'/',timeout=15,context=context) as response:code=response.status
+        except HTTPError as error:code=error.code
+        require(code==404,'Unexpected HTTPS response through custom ACME CA')
+    else:denial('https://'+a.public_host+'/',[404])
+    run('caddy','validate','--config','/etc/caddy/remote-access.Caddyfile','--adapter','caddyfile')
 if __name__=='__main__':stage_main('https',install,check)
