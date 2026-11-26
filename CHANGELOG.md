@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.1
+
+- Give navigation, reload and JavaScript evaluation a 30-second IPC response budget instead of the previous 5 seconds. `BH_IPC_TIMEOUT` overrides this slow-operation budget; ordinary commands and connection checks retain the 5-second default.
+- Give screenshots a minimum 60-second response budget. A client-side IPC timeout does not cancel the browser action, so its error now requires state verification before retrying.
+- Backport the accepted timeout behavior from browser-use/browser-harness PR #1003 into the bundled 0.1.9 runtime. Verified through the plugin's actual `browser_exec` handler on vps-tatiana with delayed JavaScript, navigation and screenshot operations.
+
 ## 1.5.0
 
 - Default screenshots to JPEG quality 85 with a dedicated 15-second timeout; preserve explicit PNG output and the 5-second timeout for other commands.

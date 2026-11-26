@@ -38,21 +38,54 @@ _load_env()
 NAME = os.environ.get("BU_NAME", "default")
 SOCK = ipc.sock_addr(NAME)
 INTERNAL = ("chrome://", "chrome-untrusted://", "devtools://", "chrome-extension://", "about:")
+IPC_CONNECT_TIMEOUT_SECONDS = 5.0
+DEFAULT_IPC_RESPONSE_TIMEOUT_SECONDS = 5.0
 
 
-def _send(req, timeout=5.0):
-    c, token = ipc.connect(NAME, timeout=timeout)
+def _env_seconds(name, default):
     try:
-        r = ipc.request(c, token, req)
+        value = float(os.environ.get(name, ""))
+    except ValueError:
+        return default
+    return value if 0 < value < math.inf else default
+
+
+# Navigation and JavaScript can wait on a slow remote browser. Keep a short
+# budget for other calls so a dead daemon still fails promptly.
+SLOW_IPC_RESPONSE_TIMEOUT_SECONDS = _env_seconds("BH_IPC_TIMEOUT", 30.0)
+SLOW_CDP_METHODS = {"Page.navigate", "Page.reload", "Runtime.evaluate", "Runtime.callFunctionOn"}
+SCREENSHOT_IPC_RESPONSE_TIMEOUT_SECONDS = max(60.0, SLOW_IPC_RESPONSE_TIMEOUT_SECONDS)
+
+
+class _IPCResponseTimeout(TimeoutError):
+    pass
+
+
+def _send(req, timeout=5.0, response_timeout=None):
+    if response_timeout is None:
+        response_timeout = timeout
+    c, token = ipc.connect(NAME, timeout=IPC_CONNECT_TIMEOUT_SECONDS)
+    try:
+        c.settimeout(response_timeout)
+        try:
+            r = ipc.request(c, token, req)
+        except TimeoutError as e:
+            label = req.get("method") or req.get("meta") or "request"
+            raise _IPCResponseTimeout(
+                f"{label} timed out after {response_timeout:g}s waiting for the daemon; "
+                "the browser action may have completed — verify before retrying"
+            ) from e
     finally:
         c.close()
     if "error" in r: raise RuntimeError(r["error"])
     return r
 
 
-def cdp(method, session_id=None, **params):
+def cdp(method, session_id=None, _response_timeout=None, **params):
     """Raw CDP. cdp('Page.navigate', url='...'), cdp('DOM.getDocument', depth=-1)."""
-    return _send({"method": method, "params": params, "session_id": session_id}).get("result", {})
+    if _response_timeout is None:
+        _response_timeout = SLOW_IPC_RESPONSE_TIMEOUT_SECONDS if method in SLOW_CDP_METHODS else DEFAULT_IPC_RESPONSE_TIMEOUT_SECONDS
+    return _send({"method": method, "params": params, "session_id": session_id}, response_timeout=_response_timeout).get("result", {})
 
 
 def drain_events():  return _send({"meta": "drain_events"})["events"]
@@ -247,7 +280,10 @@ def capture_screenshot(path=None, full=False, max_dim=None):
     params = {"format": fmt, "captureBeyondViewport": full}
     if fmt == "jpeg":
         params["quality"] = 85
-    r = _send({"method": "Page.captureScreenshot", "params": params, "session_id": None}, timeout=15.0).get("result", {})
+    r = _send(
+        {"method": "Page.captureScreenshot", "params": params, "session_id": None},
+        response_timeout=SCREENSHOT_IPC_RESPONSE_TIMEOUT_SECONDS,
+    ).get("result", {})
     open(path, "wb").write(base64.b64decode(r["data"]))
     if max_dim:
         from PIL import Image
